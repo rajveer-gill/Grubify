@@ -1,0 +1,583 @@
+/* Reset and base styles */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  background-color: #000;
+  color: #fff;
+  line-height: 1.5;
+}
+
+/* Main container */
+.nutrify-container {
+  display: flex;
+  height: 100vh;
+  background-color: #000;
+  color: white;
+}
+
+/* Simplified sidebar styles */
+.sidebar {
+  width: 250px;
+  background-color: #0c0c0c;
+  display: flex;
+  flex-direction: column;
+  padding: 20px 0;
+}
+
+.sidebar-header {
+  padding: 12px 20px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 30px;
+}
+
+.logo-container {
+  width: 28px;
+  height: 28px;
+  background-color: #22c55e;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.logo-text {
+  font-weight: 500;
+  font-size: 18px;
+}
+
+.dropdown-icon {
+  margin-left: auto;
+  opacity: 0.6;
+}
+
+/* Horizontal navigation menu */
+.nav-menu {
+  display: flex;
+  justify-content: center;
+  padding: 10px 0;
+  margin-bottom: 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 14px;
+  cursor: pointer;
+  margin: 0 5px;
+}
+
+.nav-item:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+/* History sections */
+.history-container {
+  padding: 0 20px;
+}
+
+.history-title {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.5);
+  margin-bottom: 10px;
+  font-weight: 500;
+}
+
+.history-item {
+  width: 100%;
+  text-align: left;
+  padding: 8px 12px;
+  font-size: 14px;
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.8);
+  cursor: pointer;
+  border-radius: 4px;
+  margin-bottom: 5px;
+}
+
+.history-item:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.divider {
+  height: 1px;
+  background-color: rgba(255, 255, 255, 0.1);
+  margin: 20px 0;
+}
+
+.sidebar-footer {
+  margin-top: auto;
+  padding: 20px;
+}
+
+.upgrade-button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: none;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: rgba(255, 255, 255, 0.8);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.upgrade-button:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+/* Main content styles */
+.main-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  justify-content: center;
+  padding: 0 20px;
+}
+
+/* Profile button */
+.profile-container {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  z-index: 100;
+}
+
+.profile-button {
+  background-color: rgba(255, 255, 255, 0.1);
+  border: none;
+  color: white;
+  cursor: pointer;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.2s;
+}
+
+.profile-button:hover {
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+.profile-dropdown {
+  position: absolute;
+  top: 50px;
+  right: 0;
+  width: 240px;
+  background-color: #1a1a1a;
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  overflow: hidden;
+}
+
+.profile-header {
+  padding: 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  flex-direction: column;
+}
+
+.profile-email {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.5);
+  margin-top: 4px;
+}
+
+.profile-section {
+  padding: 8px 0;
+}
+
+.profile-option {
+  width: 100%;
+  text-align: left;
+  padding: 10px 16px;
+  background: none;
+  border: none;
+  color: white;
+  cursor: pointer;
+}
+
+.profile-option:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+/* Chat/input area */
+.chat-area {
+  max-width: 800px;
+  width: 100%;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 20px;
+}
+
+/* Main heading with gradient */
+.main-heading {
+  font-size: 48px;
+  font-weight: bold;
+  margin-bottom: 40px;
+  text-align: center;
+  background: linear-gradient(90deg, #22c55e, #0073D3);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  line-height: 1.2;
+}
+
+.center-query-container {
+  width: 100%;
+  max-width: 600px;
+}
+
+.center-input-wrapper {
+  position: relative;
+  margin-top: 20px;
+}
+
+.center-text-input {
+  width: 100%;
+  background-color: rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  padding: 16px 20px;
+  padding-right: 80px;
+  color: white;
+  font-size: 16px;
+}
+
+.center-text-input:focus {
+  outline: none;
+  border-color: rgba(255, 255, 255, 0.3);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.1);
+}
+
+.center-input-buttons {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+}
+
+.icon-button {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  margin-left: 8px;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+}
+
+.icon-button:hover {
+  color: white;
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.disclaimer-container {
+  width: 100%;
+  padding: 12px 16px;
+  margin-top: 40px;
+}
+
+.disclaimer {
+  max-width: 600px;
+  margin: 0 auto;
+  text-align: center;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+/* Recipe details view */
+.recipe-details {
+  max-width: 900px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 40px 20px;
+  overflow-y: auto;
+}
+
+.back-button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.7);
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 4px;
+  margin-bottom: 24px;
+}
+
+.back-button:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.recipe-title {
+  font-size: 32px;
+  margin-bottom: 30px;
+  background: linear-gradient(90deg, #22c55e, #0073D3);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.recipe-content {
+  display: flex;
+  gap: 40px;
+}
+
+@media (max-width: 768px) {
+  .recipe-content {
+    flex-direction: column;
+  }
+}
+
+.ingredients-section, 
+.instructions-section {
+  flex: 1;
+}
+
+.ingredients-section h2,
+.instructions-section h2 {
+  margin-bottom: 16px;
+  font-size: 22px;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.ingredients-list {
+  margin-bottom: 24px;
+  border-radius: 12px;
+  overflow: hidden;
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.ingredient-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.ingredient-item:last-child {
+  border-bottom: none;
+}
+
+.ingredient-item.in-pantry {
+  background-color: rgba(34, 197, 94, 0.1);
+}
+
+.ingredient-item.needed {
+  background-color: rgba(255, 79, 79, 0.1);
+}
+
+.ingredient-name {
+  flex: 1;
+  font-weight: 500;
+}
+
+.ingredient-amount {
+  flex: 1;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.ingredient-status {
+  flex: 1;
+  text-align: right;
+  font-size: 13px;
+}
+
+.ingredient-item.in-pantry .ingredient-status {
+  color: #22c55e;
+}
+
+.ingredient-item.needed .ingredient-status {
+  color: #ff4f4f;
+}
+
+.missing-ingredients {
+  background-color: rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  padding: 20px;
+  margin-top: 20px;
+}
+
+.missing-ingredients h3 {
+  margin-top: 0;
+  margin-bottom: 12px;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.grocery-options {
+  display: flex;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.grocery-button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  font-weight: 500;
+  transition: transform 0.1s ease;
+}
+
+.grocery-button:hover {
+  transform: translateY(-2px);
+}
+
+.grocery-button.instacart {
+  background-color: #F95700;
+  color: white;
+}
+
+.grocery-button.kroger {
+  background-color: #0073D3;
+  color: white;
+}
+
+.instructions-list {
+  padding-left: 24px;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.instruction-step {
+  margin-bottom: 16px;
+  line-height: 1.5;
+}
+
+.save-recipe-button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-radius: 8px;
+  background-color: #22c55e;
+  border: none;
+  color: white;
+  cursor: pointer;
+  font-weight: 500;
+  margin-top: 30px;
+}
+
+.save-recipe-button:hover {
+  background-color: #1da04b;
+}
+
+/* Past Recipes View */
+.past-recipes {
+  max-width: 1000px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 40px 20px;
+  overflow-y: auto;
+}
+
+.past-recipes-title {
+  font-size: 32px;
+  margin-bottom: 30px;
+  background: linear-gradient(90deg, #22c55e, #0073D3);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.recipe-history-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 20px;
+}
+
+.recipe-card {
+  background-color: rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.recipe-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.3);
+}
+
+.recipe-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+
+.recipe-card-header h3 {
+  margin: 0;
+  font-size: 18px;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.recipe-date {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.recipe-description {
+  margin-bottom: 20px;
+  flex-grow: 1;
+  color: rgba(255, 255, 255, 0.7);
+  line-height: 1.4;
+  font-size: 14px;
+}
+
+.recipe-card-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.card-action-button {
+  flex: 1;
+  padding: 10px;
+  background-color: rgba(255, 255, 255, 0.1);
+  border: none;
+  border-radius: 6px;
+  color: white;
+  cursor: pointer;
+  font-size: 13px;
+  transition: background-color 0.2s ease;
+}
+
+.card-action-button:hover {
+  background-color: rgba(255, 255, 255, 0.15);
+}
