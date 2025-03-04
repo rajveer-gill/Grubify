@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { MessageCircle, Compass, ChevronDown, Mic, Info, User, ShoppingCart, ArrowLeft, Search, Save } from 'lucide-react';
+import { MessageCircle, Compass, ChevronDown, Info, User, ShoppingCart, ArrowLeft, Search, Save, X, Check, Send } from 'lucide-react';
 import './NutrifyAI.css';
 
 const NutrifyAI = () => {
@@ -9,6 +9,9 @@ const NutrifyAI = () => {
   const [profileOpen, setProfileOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [chatInput, setChatInput] = useState('');
+  const [modificationLoading, setModificationLoading] = useState(false);
+  const [chatHistory, setChatHistory] = useState([]);
   
   // Sample recipe data as fallback
   const sampleRecipe = {
@@ -31,7 +34,7 @@ const NutrifyAI = () => {
     ]
   };
   
-  // The base URL for the API - could be configured based on environment
+  // The base URL for the API
   const API_URL = 'http://localhost:5000';
   
   // Function to fetch recipe from our Python backend
@@ -55,6 +58,32 @@ const NutrifyAI = () => {
       return data.structured_recipe;
     } catch (error) {
       console.error('Error fetching recipe:', error);
+      throw error;
+    }
+  };
+  
+  // Function to modify existing recipe through the API
+  const modifyRecipeFromAPI = async (originalRecipe, modifications) => {
+    try {
+      const response = await fetch(`${API_URL}/modify-recipe`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          original_recipe: originalRecipe,
+          modifications: modifications 
+        }),
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to modify recipe');
+      }
+      
+      const data = await response.json();
+      return data.modified_recipe;
+    } catch (error) {
+      console.error('Error modifying recipe:', error);
       throw error;
     }
   };
@@ -122,7 +151,8 @@ const NutrifyAI = () => {
         ...recipe,
         ingredients: recipe.ingredients.map(ingredient => ({
           ...ingredient,
-          inPantry: Math.random() > 0.6 // Random true/false, weighted toward false
+          inPantry: Math.random() > 0.6, // Random true/false, weighted toward false
+          confirmed: false
         }))
       };
       
@@ -133,39 +163,123 @@ const NutrifyAI = () => {
       setError("Failed to fetch recipe. Using sample recipe instead.");
       
       // Fallback to sample recipe
-      setCurrentRecipe(sampleRecipe);
+      setCurrentRecipe({
+        ...sampleRecipe,
+        ingredients: sampleRecipe.ingredients.map(ingredient => ({
+          ...ingredient,
+          confirmed: false
+        }))
+      });
       setCurrentView('details');
     } finally {
       setLoading(false);
     }
   };
   
-  // Handle redirection to grocery services
-  const redirectToGroceryService = async (service) => {
-    const neededIngredients = currentRecipe.ingredients.filter(i => !i.inPantry);
+  // Handle sending a recipe modification request
+  const handleRecipeModification = async () => {
+    if (chatInput.trim() === '') return;
     
-    if (service.toLowerCase() === 'kroger') {
-      // For Kroger, we have a backend endpoint to add to cart
-      try {
-        setLoading(true);
-        const result = await addItemsToCart(
-          neededIngredients.map(i => i.name), 
-          'kroger'
-        );
-        
-        if (result.success) {
-          alert(`Added to Kroger cart: ${neededIngredients.map(i => i.name).join(', ')}`);
-        } else {
-          alert(`Failed to add to Kroger cart: ${result.error || 'Unknown error'}`);
+    setModificationLoading(true);
+    
+    // Add user message to chat history
+    const newMessage = { 
+      text: chatInput, 
+      sender: 'user',
+      timestamp: new Date().toISOString()
+    };
+    
+    setChatHistory(prevHistory => [...prevHistory, newMessage]);
+    setChatInput('');
+    
+    try {
+      // Call the API to modify the recipe
+      const modifiedRecipe = await modifyRecipeFromAPI(currentRecipe, chatInput);
+      
+      // Keep pantry status and confirmation status for ingredients that exist in both recipes
+      const updatedRecipe = {
+        ...modifiedRecipe,
+        ingredients: modifiedRecipe.ingredients.map(newIngredient => {
+          // Try to find this ingredient in the current recipe
+          const existingIngredient = currentRecipe.ingredients.find(
+            ing => ing.name.toLowerCase() === newIngredient.name.toLowerCase()
+          );
+          
+          return {
+            ...newIngredient,
+            inPantry: existingIngredient ? existingIngredient.inPantry : Math.random() > 0.6,
+            confirmed: existingIngredient ? existingIngredient.confirmed : false
+          };
+        })
+      };
+      
+      // Add system response to chat history
+      setChatHistory(prevHistory => [
+        ...prevHistory, 
+        { 
+          text: `Recipe updated: "${modifiedRecipe.name}"`, 
+          sender: 'system',
+          timestamp: new Date().toISOString()
         }
-      } catch (error) {
-        alert(`Error adding to Kroger cart: ${error.message}`);
-      } finally {
-        setLoading(false);
+      ]);
+      
+      setCurrentRecipe(updatedRecipe);
+    } catch (error) {
+      console.error("Error modifying recipe:", error);
+      
+      // Add error message to chat history
+      setChatHistory(prevHistory => [
+        ...prevHistory, 
+        { 
+          text: "Sorry, I couldn't modify the recipe. Please try a different request.", 
+          sender: 'system',
+          timestamp: new Date().toISOString(),
+          isError: true
+        }
+      ]);
+    } finally {
+      setModificationLoading(false);
+    }
+  };
+  
+  // Handle removing an ingredient
+  const handleRemoveIngredient = (indexToRemove) => {
+    const updatedRecipe = {...currentRecipe};
+    updatedRecipe.ingredients = updatedRecipe.ingredients.filter((_, index) => index !== indexToRemove);
+    setCurrentRecipe(updatedRecipe);
+  };
+  
+  // Handle confirming an ingredient
+  const handleConfirmIngredient = (index) => {
+    const updatedRecipe = {...currentRecipe};
+    updatedRecipe.ingredients[index].confirmed = !updatedRecipe.ingredients[index].confirmed;
+    setCurrentRecipe(updatedRecipe);
+  };
+  
+  // Handle ordering with Kroger
+  const handleOrderWithKroger = async () => {
+    const confirmedIngredients = currentRecipe.ingredients
+      .filter(ing => ing.confirmed && !ing.inPantry)
+      .map(ing => ing.name);
+    
+    if (confirmedIngredients.length === 0) {
+      alert("Please confirm at least one ingredient to order");
+      return;
+    }
+    
+    setLoading(true);
+    try {
+      const result = await addItemsToCart(confirmedIngredients, 'kroger');
+      
+      if (result.success) {
+        alert(`Added to Kroger cart: ${confirmedIngredients.join(', ')}`);
+      } else {
+        alert(`Failed to add to Kroger cart: ${result.error || 'Unknown error'}`);
       }
-    } else {
-      // For Instacart, we'll just show an alert (could be improved)
-      alert(`Redirecting to ${service} with ingredients: ${neededIngredients.map(i => i.name).join(', ')}`);
+    } catch (error) {
+      alert(`Error adding to Kroger cart: ${error.message}`);
+    } finally {
+      setLoading(false);
     }
   };
   
@@ -292,9 +406,7 @@ const NutrifyAI = () => {
                       <Search size={18} />
                     )}
                   </button>
-                  <button className="icon-button" disabled={loading}>
-                    <Mic size={18} />
-                  </button>
+                  {/* Removed microphone button */}
                 </div>
               </div>
               
@@ -338,17 +450,38 @@ const NutrifyAI = () => {
             <div className="recipe-content">
               <div className="ingredients-section">
                 <h2>Ingredients</h2>
+                
                 <div className="ingredients-list">
                   {currentRecipe.ingredients.map((ingredient, index) => (
                     <div 
                       key={index} 
-                      className={`ingredient-item ${ingredient.inPantry ? 'in-pantry' : 'needed'}`}
+                      className={`ingredient-item ${ingredient.inPantry ? 'in-pantry' : 'needed'} ${ingredient.confirmed ? 'confirmed' : ''}`}
                     >
                       <span className="ingredient-name">{ingredient.name}</span>
                       <span className="ingredient-amount">{ingredient.amount}</span>
                       <span className="ingredient-status">
                         {ingredient.inPantry ? '✓ In Pantry' : '✗ Need to Buy'}
                       </span>
+                      
+                      <div className="ingredient-actions">
+                        {!ingredient.inPantry && (
+                          <button 
+                            className={`confirm-button ${ingredient.confirmed ? 'confirmed' : ''}`}
+                            onClick={() => handleConfirmIngredient(index)}
+                            title={ingredient.confirmed ? "Unconfirm" : "Confirm"}
+                          >
+                            <Check size={16} />
+                          </button>
+                        )}
+                        
+                        <button 
+                          className="remove-button"
+                          onClick={() => handleRemoveIngredient(index)}
+                          title="Remove"
+                        >
+                          <X size={16} />
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -356,23 +489,15 @@ const NutrifyAI = () => {
                 <div className="missing-ingredients">
                   <h3>Ingredients to Purchase</h3>
                   <p>
-                    {currentRecipe.ingredients.filter(i => !i.inPantry).length} items needed
+                    {currentRecipe.ingredients.filter(i => !i.inPantry).length} items needed 
+                    ({currentRecipe.ingredients.filter(i => !i.inPantry && i.confirmed).length} confirmed)
                   </p>
                   
                   <div className="grocery-options">
                     <button 
-                      className="grocery-button instacart"
-                      onClick={() => redirectToGroceryService('Instacart')}
-                      disabled={loading}
-                    >
-                      <ShoppingCart size={16} />
-                      <span>Order with Instacart</span>
-                    </button>
-                    
-                    <button 
                       className="grocery-button kroger"
-                      onClick={() => redirectToGroceryService('Kroger')}
-                      disabled={loading}
+                      onClick={handleOrderWithKroger}
+                      disabled={loading || currentRecipe.ingredients.filter(i => !i.inPantry && i.confirmed).length === 0}
                     >
                       <ShoppingCart size={16} />
                       <span>Order with Kroger</span>
@@ -395,6 +520,54 @@ const NutrifyAI = () => {
                   <Save size={16} />
                   <span>Save to My Recipes</span>
                 </button>
+                
+                {/* Recipe Modification Chat */}
+                <div className="recipe-chat-container">
+                  <h3>Modify Recipe</h3>
+                  <p className="chat-help-text">
+                    Need adjustments? Ask me to make it spicier, add more protein, make it vegan, etc.
+                  </p>
+                  
+                  {/* Chat History */}
+                  {chatHistory.length > 0 && (
+                    <div className="chat-history">
+                      {chatHistory.map((message, index) => (
+                        <div 
+                          key={index} 
+                          className={`chat-message ${message.sender} ${message.isError ? 'error' : ''}`}
+                        >
+                          {message.text}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  
+                  {/* Chat Input */}
+                  <div className="chat-input-container">
+                    <input
+                      type="text"
+                      value={chatInput}
+                      onChange={(e) => setChatInput(e.target.value)}
+                      placeholder="How would you like to modify this recipe?"
+                      className="chat-input"
+                      disabled={modificationLoading}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !modificationLoading) handleRecipeModification();
+                      }}
+                    />
+                    <button 
+                      className="chat-send-button"
+                      onClick={handleRecipeModification}
+                      disabled={modificationLoading || chatInput.trim() === ''}
+                    >
+                      {modificationLoading ? (
+                        <div className="chat-loading-spinner"></div>
+                      ) : (
+                        <Send size={18} />
+                      )}
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -427,7 +600,13 @@ const NutrifyAI = () => {
                     <button 
                       className="card-action-button"
                       onClick={() => {
-                        setCurrentRecipe(sampleRecipe);
+                        setCurrentRecipe({
+                          ...sampleRecipe,
+                          ingredients: sampleRecipe.ingredients.map(ingredient => ({
+                            ...ingredient,
+                            confirmed: false
+                          }))
+                        });
                         setCurrentView('details');
                       }}
                     >
@@ -435,9 +614,18 @@ const NutrifyAI = () => {
                     </button>
                     <button 
                       className="card-action-button"
-                      onClick={() => redirectToGroceryService('Kroger')}
+                      onClick={() => {
+                        setCurrentRecipe({
+                          ...sampleRecipe,
+                          ingredients: sampleRecipe.ingredients.map(ingredient => ({
+                            ...ingredient,
+                            confirmed: !ingredient.inPantry
+                          }))
+                        });
+                        setCurrentView('details');
+                      }}
                     >
-                      Reorder Ingredients
+                      Reorder
                     </button>
                   </div>
                 </div>
