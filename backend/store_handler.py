@@ -146,6 +146,57 @@ class KrogerAPI:
 
         return all_results
 
+def fetch_ingredient_prices(ingredients, store="kroger"):
+    """
+    Fetch prices for a list of ingredient strings using the KrogerAPI.
+    Returns a list of dicts, one per ingredient, with 'ingredient', 'productName', and 'price'.
+    """
+    from dotenv import load_dotenv
+    load_dotenv()  # Ensure KROGER_CLIENT_ID, KROGER_CLIENT_SECRET are in .env
+
+    client_id = "nutrify-2432612430342445574c6e2f4174746941377459497376313952524f754958446f585241614a675677526d5646354f547a71502f4631365747572e4b1774410088019709705"
+    client_secret = "QkJnE0XrFDHIl1Y2BH9H1lFp96BYHU24fFfA2ZTL"
+
+    if not client_id or not client_secret:
+        return {"error": "Kroger credentials not found in environment variables."}
+
+    kroger_api = KrogerAPI(client_id, client_secret)
+    token = kroger_api.request_token()
+    if not token:
+        return {"error": "Failed to obtain Kroger API token."}
+
+    # For now, pick the first store near a default ZIP code, e.g. 97401
+    stores = kroger_api.get_kroger_stores(zip_code="97401", limit=1)
+    if not stores:
+        return {"error": "No Kroger stores found near ZIP code 97401."}
+    store_id = stores[0]["id"]
+
+    # Search for each ingredient and gather the first matching product + price
+    results = []
+    for ing in ingredients:
+        products = kroger_api.search_products(
+            search_terms=ing,
+            location_id=store_id,
+            limit=1
+        )
+        if products:
+            product = products[0]
+            results.append({
+                "ingredient": ing,
+                "productName": product["name"],
+                "price": product["price"],
+            })
+        else:
+            # If no product found, return a None entry
+            results.append({
+                "ingredient": ing,
+                "productName": None,
+                "price": None,
+            })
+    return results
+
+
+
 # Example Usage:
 if __name__ == "__main__":
     CLIENT_ID = "nutrify-2432612430342445574c6e2f4174746941377459497376313952524f754958446f585241614a675677526d5646354f547a71502f4631365747572e4b1774410088019709705"
