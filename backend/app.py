@@ -1,4 +1,5 @@
 from flask import Flask, request, jsonify
+from flask_cors import CORS
 from recipe_handler import fetch_recipe
 from store_handler import fetch_ingredient_prices
 from cart_handler import add_to_cart
@@ -8,11 +9,12 @@ import os
 # Load environment variables
 load_dotenv()
 
-# Debugging: Print Kroger API credentials
-print(f"🔍 Kroger Client ID: {os.getenv('KROGER_CLIENT_ID')}")
-print(f"🔍 Kroger Client Secret: {os.getenv('KROGER_CLIENT_SECRET')}")
-
 app = Flask(__name__)
+CORS(app)
+
+@app.route("/test", methods=["GET", "POST"])
+def test():
+    return jsonify({"message": "CORS test endpoint"}), 200
 
 @app.route("/")
 def home():
@@ -42,4 +44,4 @@ def add_to_cart_route():
     return jsonify(response)
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(debug=True, port=5000)

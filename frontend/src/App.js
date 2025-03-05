@@ -1,5 +1,5 @@
+// App.js
 import React from 'react';
-import './App.css';
 import NutrifyAI from './NutrifyAI';
 
 function App() {
