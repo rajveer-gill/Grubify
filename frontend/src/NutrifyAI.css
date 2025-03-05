@@ -384,6 +384,7 @@ body {
   justify-content: space-between;
   padding: 12px 16px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  background-color: rgba(255, 79, 79, 0.1);
 }
 
 .ingredient-item:last-child {

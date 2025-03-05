@@ -151,9 +151,9 @@ const NutrifyAI = () => {
         ...recipe,
         ingredients: recipe.ingredients.map(ingredient => ({
           ...ingredient,
-          inPantry: Math.random() > 0.6, // Random true/false, weighted toward false
-          confirmed: false
-        }))
+          /*inPantry: Math.random() > 0.6, // Random true/false, weighted toward false*/
+          confirmed: true,
+        })),
       };
       
       setCurrentRecipe(recipeWithPantry);
@@ -455,32 +455,28 @@ const NutrifyAI = () => {
                   {currentRecipe.ingredients.map((ingredient, index) => (
                     <div 
                       key={index} 
-                      className={`ingredient-item ${ingredient.inPantry ? 'in-pantry' : 'needed'} ${ingredient.confirmed ? 'confirmed' : ''}`}
+                      className={`ingredient-item ${ingredient.confirmed ? 'confirmed' : 'unconfirmed'}`}
                     >
                       <span className="ingredient-name">{ingredient.name}</span>
                       <span className="ingredient-amount">{ingredient.amount}</span>
-                      <span className="ingredient-status">
-                        {ingredient.inPantry ? '✓ In Pantry' : '✗ Need to Buy'}
-                      </span>
+                      <span className="ingredient-status"></span>
                       
                       <div className="ingredient-actions">
-                        {!ingredient.inPantry && (
-                          <button 
-                            className={`confirm-button ${ingredient.confirmed ? 'confirmed' : ''}`}
-                            onClick={() => handleConfirmIngredient(index)}
-                            title={ingredient.confirmed ? "Unconfirm" : "Confirm"}
-                          >
-                            <Check size={16} />
-                          </button>
-                        )}
-                        
                         <button 
+                          className={`confirm-button ${ingredient.confirmed ? 'confirmed' : ''}`}
+                          onClick={() => handleConfirmIngredient(index)}
+                          title={ingredient.confirmed ? "Unconfirm" : "Confirm"}
+                        >
+                          <Check size={16} />
+                        </button>
+                        
+                        {/*<button 
                           className="remove-button"
                           onClick={() => handleRemoveIngredient(index)}
                           title="Remove"
                         >
                           <X size={16} />
-                        </button>
+                        </button>*/}
                       </div>
                     </div>
                   ))}
