@@ -5,7 +5,7 @@ class Database:
         """
         Initialize the Database connection and cursor.
         """
-        self.connection = sqlite3.connect('data')
+        self.connection = sqlite3.connect(db_name)
         self.crsr = self.connection.cursor()
         create_table_sql = '''
         CREATE TABLE IF NOT EXISTS recipes (
@@ -27,7 +27,8 @@ class Database:
 
     def insert_recipe(self, title, link, recipe_string):
         """
-        Insert a new recipe into the database
+        Insert a new recipe into the database.
+        recipe_string should be in the format given by format_recipe_string
         """
         sql_command = '''
         INSERT INTO recipes (title, link, recipe_string) 
@@ -72,28 +73,14 @@ class Database:
         self.crsr.execute(sql_command, (title, link, recipe_string, recipe_id))
         self.connection.commit()
 
+def format_recipe_string(ingredients, link):
+    """
+    Convert a list of ingredients and amounts into a string format.
+    Ingredients should be a list of tuples like: [("ingredient1", "amount1"), ("ingredient2", "amount2")]
+    """
+    recipe_string = ""
+    for ingredient, amount in ingredients:
+        recipe_string += f"{ingredient} {amount}\n"
+    recipe_string += f"Link: {link}"
+    return recipe_string
 
-def main():
-    print("Starting the Recipe Database")
-
-    # Create a Database instance
-    with Database() as db:
-        # Insert a new recipe
-        db.insert_recipe('Chocolate Cake', 'test_link.com', 'Ingredients: sugar, flour, cocoa...')
-        
-        # Retrieve and print a specific recipe by ID
-        recipe = db.get_recipe_by_id(1)
-        print("Recipe fetched by ID:", recipe)
-        
-        # Get and print all recipes
-        recipes = db.get_all_recipes()
-        print("All Recipes:", recipes)
-        
-        # Update a recipe
-        db.update_recipe(1, 'Updated Chocolate Cake', 'test_link2.com', 'Updated ingredients list...')
-        
-        # Delete a recipe
-        db.delete_recipe(1)
-
-if __name__ == "__main__":
-    main()
