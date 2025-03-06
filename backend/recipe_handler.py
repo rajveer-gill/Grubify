@@ -24,7 +24,7 @@ def fetch_recipe(description):
     }
     """
     # Use the new library approach for openai>=1.0.0
-    openai.api_key = os.getenv("OPENAI_API_KEY")
+    openai.api_key = "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"
 
     # Provide GPT a system prompt describing exactly the JSON format we need:
     system_prompt = (
