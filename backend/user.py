@@ -2,8 +2,6 @@ import base64
 import requests
 from flask import Flask, request, redirect
 
-app = Flask(__name__)
-
 # -----------------------------------------------------------------------
 # 1) Your Kroger Dev Portal credentials for PRODUCTION environment
 # -----------------------------------------------------------------------
@@ -15,65 +13,6 @@ REDIRECT_URI = "http://127.0.0.1:5000/callback"
 AUTH_URL = "https://api.kroger.com/v1/connect/oauth2/authorize"
 TOKEN_URL = "https://api.kroger.com/v1/connect/oauth2/token"
 CART_ADD_URL = "https://api.kroger.com/v1/cart/add"
-
-# -----------------------------------------------------------------------
-# 2) Home route: Simple landing page
-# -----------------------------------------------------------------------
-@app.route("/")
-def home():
-    return """
-    <h1>Welcome to NutrifyCart (PRODUCTION)!</h1>
-    <p>This demo uses Kroger's Authorization Code flow in the Production environment.</p>
-    <p><a href='/login'>Log in with Kroger (cart.basic:write)</a></p>
-    """
-
-# -----------------------------------------------------------------------
-# 3) /login route: Start the OAuth2 Authorization Code flow
-# -----------------------------------------------------------------------
-@app.route("/login")
-def login():
-    """
-    Redirect the user to Kroger's OAuth2 authorization endpoint
-    requesting the cart.basic:write scope (for modifying a cart).
-    """
-    scope = "cart.basic:write"
-    authorize_url = (
-        f"{AUTH_URL}?client_id={CLIENT_ID}"
-        f"&redirect_uri={REDIRECT_URI}"
-        f"&response_type=code"
-        f"&scope={scope}"
-    )
-    return redirect(authorize_url)
-
-# -----------------------------------------------------------------------
-# 4) /callback route: Kroger redirects here after user login
-# -----------------------------------------------------------------------
-@app.route("/callback")
-def callback():
-    """
-    Kroger will redirect to this route with ?code=XXXX in the URL.
-    We exchange that code for a user-level token, then demonstrate
-    adding an item to the cart in the Production environment.
-    """
-    auth_code = request.args.get("code", None)
-    if not auth_code:
-        return "No code provided by Kroger. Check if user canceled or if there's an error."
-
-    # Exchange auth_code for an actual user token
-    user_token = exchange_code_for_token(auth_code)
-
-    if not user_token:
-        return "Failed to get user token from Kroger."
-
-    # If we got a user token, let's add an item to their cart as a demo:
-    success = add_item_to_cart(user_token, upc="0001111019270", quantity=1, modality="PICKUP")
-    if success:
-        return """
-        <h2>Successfully added an item to your Kroger cart (Production)!</h2>
-        <p>Check your Kroger account or app to confirm.</p>
-        """
-    else:
-        return "Failed to add item to cart (check console for details)."
 
 # -----------------------------------------------------------------------
 # 5) Helper: Exchange the authorization code for a user-level token
@@ -96,7 +35,6 @@ def exchange_code_for_token(auth_code):
         "redirect_uri": REDIRECT_URI,
         "scope": "cart.basic:write"
     }
-
     response = requests.post(TOKEN_URL, headers=headers, data=data)
     if response.status_code == 200:
         token_data = response.json()
@@ -135,12 +73,4 @@ def add_item_to_cart(user_token, upc, quantity, modality="PICKUP"):
     else:
         print("Error adding item to cart:", response.status_code, response.text)
         return False
-
-# -----------------------------------------------------------------------
-# 7) Run the Flask app
-# -----------------------------------------------------------------------
-if __name__ == "__main__":
-    # For local testing only. 
-    # Visit http://127.0.0.1:5000/ in your browser to start.
-    app.run(port=5000, debug=True)
 
