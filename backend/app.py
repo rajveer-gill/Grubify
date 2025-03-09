@@ -1,8 +1,8 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, redirect, session
 from flask_cors import CORS
 from recipe_handler import fetch_recipe
 from store_handler import fetch_ingredient_prices
-from cart_handler import add_to_cart
+from user import exchange_code_for_token, add_item_to_cart
 from dotenv import load_dotenv
 import os
 
@@ -10,7 +10,19 @@ import os
 load_dotenv()
 
 app = Flask(__name__)
-CORS(app)
+app.secret_key = "some-secret-key"  # Required for session management
+
+# Enable CORS with credentials
+CORS(app, supports_credentials=True, origins=["http://localhost:3000"])  # Replace with your frontend URL
+
+# Configure session cookies for cross-origin requests
+app.config['SESSION_COOKIE_SAMESITE'] = 'None'
+app.config['SESSION_COOKIE_SECURE'] = True  # Ensure cookies are only sent over HTTPS
+
+# Kroger API constants
+CLIENT_ID = "nutrifai-243261243034242e644175722e4a4c397a4e507a454732506e594e366576617532756c356b4741754c48746c31634a59564b784d4f2e364e7743462e3423701595089688646"
+REDIRECT_URI = "http://127.0.0.1:5000/callback"
+AUTH_URL = "https://api.kroger.com/v1/connect/oauth2/authorize"  # Add this line
 
 @app.route("/test", methods=["GET", "POST"])
 def test():
@@ -37,11 +49,63 @@ def fetch_prices():
 
 @app.route("/add-to-cart", methods=["POST"])
 def add_to_cart_route():
+    user_token = session.get("kroger_user_token")
+    if not user_token:
+        print("No token found in session")  # Debugging
+        return jsonify({"success": False, "error": "User not logged in to Kroger"}), 401
+
     data = request.json
     items = data.get("items", [])
-    store = data.get("store", "kroger")
-    response = add_to_cart(items, store)
-    return jsonify(response)
+    if not items:
+        return jsonify({"success": False, "error": "No items provided"}), 400
+
+    success_list = []
+    for upc in items:
+        success = add_item_to_cart(user_token, upc, quantity=1, modality="PICKUP")
+        success_list.append(success)
+
+    if all(success_list):
+        return jsonify({"success": True, "message": f"Added {len(items)} items to Kroger cart"})
+    else:
+        return jsonify({"success": False, "error": "One or more items failed to add."})
+
+@app.route("/login")
+def login():
+    """
+    Redirects the user to Kroger's OAuth2 authorization endpoint
+    requesting the cart.basic:write scope (so we can modify the cart).
+    """
+    scope = "cart.basic:write"
+    authorize_url = (
+        f"{AUTH_URL}?client_id={CLIENT_ID}"
+        f"&redirect_uri={REDIRECT_URI}"
+        f"&response_type=code"
+        f"&scope={scope}"
+    )
+    return redirect(authorize_url)
+
+@app.route("/callback")
+def callback():
+    """
+    Kroger redirects here with ?code=XXXX after user logs in.
+    We exchange that code for a user-level token, then store it in session.
+    """
+    auth_code = request.args.get("code", None)
+    if not auth_code:
+        return "No code provided by Kroger."
+
+    user_token = exchange_code_for_token(auth_code)
+    if not user_token:
+        return "Failed to get user token from Kroger."
+
+    # Store token in session
+    session["kroger_user_token"] = user_token
+    print("Token stored in session:", user_token)  # Debugging
+
+    return """
+    <h2>Successfully logged into Kroger!</h2>
+    <p>You can now return to the React UI and click "Order with Kroger".</p>
+    """
 
 if __name__ == "__main__":
     app.run(debug=True, port=5000)

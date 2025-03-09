@@ -122,6 +122,7 @@ const NutrifyAI = () => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ items, store }),
+        credentials: 'include',
       });
       
       if (!response.ok) {
@@ -341,9 +342,12 @@ const NutrifyAI = () => {
         
         {/* Upgrade button */}
         <div className="sidebar-footer">
-          <button className="upgrade-button">
+          <button 
+            className="upgrade-button"
+            onClick={() => window.open("http://127.0.0.1:5000/login", "_blank")}
+          >
             <Info size={16} />
-            <span>Nutrify Plus</span>
+            <span>Login with Kroger</span>
           </button>
         </div>
       </div>
