@@ -4,6 +4,7 @@ from recipe_handler import fetch_recipe
 from store_handler import fetch_ingredient_prices
 from user import exchange_code_for_token, add_item_to_cart
 from dotenv import load_dotenv
+from data import Database
 import os
 
 # Load environment variables
@@ -39,6 +40,57 @@ def generate_recipe():
     recipe = fetch_recipe(user_prompt)
     return jsonify(recipe)
 
+@app.route("/save-recipe", methods=["POST"])
+def save_recipe():
+    data = request.json
+    print(data)
+    
+    if not data or 'recipe' not in data:
+        return jsonify({
+            'success': False,
+            'error': 'Invalid request: missing recipe data'
+        }), 400
+    
+    recipe_data = data['recipe']
+    
+    required_fields = ['name', 'ingredients', 'instructions']
+    if not all(field in recipe_data for field in required_fields):
+        return jsonify({
+            'success': False,
+            'error': 'Invalid recipe: missing required fields'
+        }), 400
+    
+    try:
+        db = Database()
+        
+        db.insert_recipe(data)
+        
+        return jsonify({
+            'success': True,
+            'message': 'Recipe saved successfully',
+            'recipe_id': str(recipe_id)
+        })
+        
+    except Exception as e:
+        # Log the error for debugging
+        print(f"Error saving recipe: {str(e)}")
+        
+        # Return error response
+        return jsonify({
+            'success': False,
+            'error': 'Failed to save recipe'
+        }), 500
+
+@app.route("/get-past", methods=["POST"])
+def get_past_recipes():
+    print("getting past...")
+    db = Database()
+
+    recipes = db.get_all_recipes()
+    print(recipes)
+
+    return jsonify(recipes)
+
 @app.route("/fetch-prices", methods=["POST"])
 def fetch_prices():
     data = request.json
@@ -66,7 +118,7 @@ def add_to_cart_route():
     kroger_api = KrogerAPI(client_id, client_secret)
     
     # Get access token for product search
-    search_token = kroger_api.request_token()
+    search_token = kroger_api.request_token() # kroger_api.request_token()
     if not search_token:
         return jsonify({"success": False, "error": "Failed to authenticate for product search"}), 500
     
