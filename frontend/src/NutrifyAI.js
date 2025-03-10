@@ -522,13 +522,13 @@ const NutrifyAI = () => {
                 </button>
                 
                 {/* Recipe Modification Chat */}
-                <div className="recipe-chat-container">
+                {/* <div className="recipe-chat-container">
                   <h3>Modify Recipe</h3>
                   <p className="chat-help-text">
                     Need adjustments? Ask me to make it spicier, add more protein, make it vegan, etc.
                   </p>
                   
-                  {/* Chat History */}
+                  {/* Chat History }
                   {chatHistory.length > 0 && (
                     <div className="chat-history">
                       {chatHistory.map((message, index) => (
@@ -542,7 +542,7 @@ const NutrifyAI = () => {
                     </div>
                   )}
                   
-                  {/* Chat Input */}
+                  {/* Chat Input }
                   <div className="chat-input-container">
                     <input
                       type="text"
@@ -567,7 +567,7 @@ const NutrifyAI = () => {
                       )}
                     </button>
                   </div>
-                </div>
+                </div> */}
               </div>
             </div>
           </div>
