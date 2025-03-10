@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   MessageCircle,
   Compass,
@@ -25,7 +25,10 @@ const NutrifyAI = () => {
   const [chatInput, setChatInput] = useState('');
   const [modificationLoading, setModificationLoading] = useState(false);
   const [chatHistory, setChatHistory] = useState([]);
-  const [cartStatus, setCartStatus] = useState(null); // NEW state for cart overlay status
+  const [cartStatus, setCartStatus] = useState(null); // State for cart overlay status
+  const [recipeSaving, setRecipeSaving] = useState(false); // State to track save recipe operation
+  const [pastRecipes, setPastRecipes] = useState([]); // NEW state for past recipes
+  const [pastRecipesLoading, setPastRecipesLoading] = useState(false); // NEW state for loading indicator
   
   // Sample recipe data as fallback
   const sampleRecipe = {
@@ -50,6 +53,50 @@ const NutrifyAI = () => {
   
   // The base URL for the API
   const API_URL = 'http://127.0.0.1:5000';
+  // NEW Function to fetch past recipes
+  const fetchPastRecipes = async () => {
+    setPastRecipesLoading(true);
+    try {
+      const response = await fetch(`${API_URL}/get-past`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch past recipes');
+      }
+      
+      const data = await response.json();
+      
+      // Format the recipes properly
+      const formattedRecipes = data.map(item => ({
+        ...item.recipe,
+        // Ensure ingredients have the confirmed property
+        ingredients: item.recipe.ingredients.map(ing => ({
+          ...ing,
+          confirmed: false
+        }))
+      }));
+      
+      setPastRecipes(formattedRecipes);
+    } catch (error) {
+      console.error('Error fetching past recipes:', error);
+      // Use empty array if error occurs
+      setPastRecipes([]);
+    } finally {
+      setPastRecipesLoading(false);
+    }
+  };
+  
+  // Fetch past recipes when visiting the Past Recipes view
+  useEffect(() => {
+    if (currentView === 'pastRecipes') {
+      fetchPastRecipes();
+    }
+  }, [currentView]);
   
   // Function to fetch recipe from our Python backend
   const fetchRecipeFromAPI = async (description) => {
@@ -146,6 +193,29 @@ const NutrifyAI = () => {
       return await response.json();
     } catch (error) {
       console.error('Error adding to cart:', error);
+      return { success: false, error: error.message };
+    }
+  };
+  
+  // Function to save recipe to database
+  const saveRecipeToDatabase = async (recipe) => {
+    try {
+      const response = await fetch(`${API_URL}/save-recipe`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ recipe }),
+        credentials: 'include',
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to save recipe');
+      }
+      
+      return await response.json();
+    } catch (error) {
+      console.error('Error saving recipe:', error);
       return { success: false, error: error.message };
     }
   };
@@ -297,6 +367,54 @@ const NutrifyAI = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Handler for saving recipe
+  const handleSaveRecipe = async () => {
+    if (!currentRecipe) return;
+    
+    // Set saving state - used internally, not displayed in UI
+    setRecipeSaving(true);
+    
+    try {
+      // Prepare recipe data for saving
+      const recipeToSave = {
+        name: currentRecipe.name,
+        ingredients: currentRecipe.ingredients.map(ing => ({
+          name: ing.name,
+          amount: ing.amount,
+          inPantry: ing.inPantry
+        })),
+        instructions: currentRecipe.instructions,
+        dateCreated: new Date().toISOString()
+      };
+      
+      // Call API to save recipe
+      const result = await saveRecipeToDatabase(recipeToSave);
+      
+      console.log("Recipe saved:", result);
+      
+    } catch (error) {
+      console.error("Error saving recipe:", error);
+    } finally {
+      setRecipeSaving(false);
+    }
+  };
+
+  // Helper function to format date
+  const formatDate = (dateString) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', { 
+      year: 'numeric', 
+      month: 'short', 
+      day: 'numeric' 
+    });
+  };
+
+  // Helper function to create a short description from the recipe
+  const createRecipeDescription = (recipe) => {
+    const ingredients = recipe.ingredients.slice(0, 3).map(ing => ing.name).join(', ');
+    return `A recipe with ${ingredients}${recipe.ingredients.length > 3 ? ', and more' : ''}.`;
   };
 
   return (
@@ -508,7 +626,11 @@ const NutrifyAI = () => {
                   ))}
                 </ol>
                 
-                <button className="save-recipe-button">
+                <button 
+                  className="save-recipe-button"
+                  onClick={handleSaveRecipe}
+                  disabled={recipeSaving}
+                >
                   <Save size={16} />
                   <span>Save to My Recipes</span>
                 </button>
@@ -530,132 +652,156 @@ const NutrifyAI = () => {
             
             <h1 className="past-recipes-title">Your Recipe History</h1>
             
-            <div className="recipe-history-grid">
-              {[1, 2, 3, 4].map((item) => (
-                <div key={item} className="recipe-card">
-                  <div className="recipe-card-header">
-                    <h3>Mediterranean Quinoa Bowl</h3>
-                    <span className="recipe-date">Feb 12, 2023</span>
+            {pastRecipesLoading ? (
+              <div className="loading-container">
+                <div className="loading-spinner"></div>
+                <p>Loading your recipes...</p>
+              </div>
+            ) : pastRecipes.length === 0 ? (
+              <div className="no-recipes-message">
+                <p>You don't have any saved recipes yet.</p>
+                <button 
+                  className="primary-button"
+                  onClick={() => setCurrentView('input')}
+                >
+                  Create Your First Recipe
+                </button>
+              </div>
+            ) : (
+              <div className="recipe-history-grid">
+                {pastRecipes.map((recipe, index) => (
+                  <div key={index} className="recipe-card">
+                    <div className="recipe-card-header">
+                      <h3>{recipe.name}</h3>
+                      <span className="recipe-date">
+                        {recipe.dateCreated ? formatDate(recipe.dateCreated) : 'No date'}
+                      </span>
+                    </div>
+                    <p className="recipe-description">
+                      {createRecipeDescription(recipe)}
+                    </p>
+                    <div className="recipe-card-actions">
+                      <button
+                        className="card-action-button"
+                        onClick={() => {
+                          // Make sure all ingredients have the confirmed property
+                          const preparedRecipe = {
+                            ...recipe,
+                            ingredients: recipe.ingredients.map(ingredient => ({
+                              ...ingredient,
+                              confirmed: false
+                            }))
+                          };
+                          setCurrentRecipe(preparedRecipe);
+                          setCurrentView('details');
+                        }}
+                      >
+                        View Recipe
+                      </button>
+                      <button
+                        className="card-action-button"
+                        onClick={() => {
+                          // Make sure all ingredients have the confirmed property, and
+                          // auto-confirm items not in pantry
+                          const preparedRecipe = {
+                            ...recipe,
+                            ingredients: recipe.ingredients.map(ingredient => ({
+                              ...ingredient,
+                              confirmed: !ingredient.inPantry
+                            }))
+                          };
+                          setCurrentRecipe(preparedRecipe);
+                          setCurrentView('details');
+                        }}
+                      >
+                        Reorder
+                      </button>
+                    </div>
                   </div>
-                  <p className="recipe-description">
-                    A refreshing Mediterranean-inspired bowl with quinoa, vegetables, and feta.
-                  </p>
-                  <div className="recipe-card-actions">
-                    <button
-                      className="card-action-button"
-                      onClick={() => {
-                        setCurrentRecipe({
-                          ...sampleRecipe,
-                          ingredients: sampleRecipe.ingredients.map(ingredient => ({
-                            ...ingredient,
-                            confirmed: false
-                          }))
-                        });
-                        setCurrentView('details');
-                      }}
-                    >
-                      View Recipe
-                    </button>
-                    <button
-                      className="card-action-button"
-                      onClick={() => {
-                        setCurrentRecipe({
-                          ...sampleRecipe,
-                          ingredients: sampleRecipe.ingredients.map(ingredient => ({
-                            ...ingredient,
-                            confirmed: !ingredient.inPantry
-                          }))
-                        });
-                        setCurrentView('details');
-                      }}
-                    >
-                      Reorder
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>
       
-{/* ---------- CART STATUS OVERLAYS ---------- */}
-{cartStatus && (
-      <div className="cart-status-overlay">
-        <div className={`cart-status-box ${cartStatus}`}>
-          {cartStatus === 'adding' && (
-            <>
-              <div className="loading-animation">
-                <div className="cart-loader"></div>
-              </div>
-              <h3>Adding Items to Kroger</h3>
-              <p>Please wait while we add your ingredients to your Kroger cart.</p>
-              <div className="progress-bar">
-                <div className="progress-fill"></div>
-              </div>
-              <button 
-                className="secondary-button" 
-                onClick={() => setCartStatus(null)}
-              >
-                Cancel
-              </button>
-            </>
-          )}
-
-          {cartStatus === 'success' && (
-            <>
-              <div className="status-icon success">
-                <Check size={32} />
-              </div>
-              <h3>Success!</h3>
-              <p>All items have been added to your Kroger cart</p>
-              <div className="action-buttons">
-                <button
-                  className="primary-button"
-                  onClick={() => window.open('https://www.kroger.com/cart', '_blank')}
-                >
-                  <ShoppingCart size={16} />
-                  Go to Kroger Cart
-                </button>
+      {/* ---------- CART STATUS OVERLAYS ---------- */}
+      {cartStatus && (
+        <div className="cart-status-overlay">
+          <div className={`cart-status-box ${cartStatus}`}>
+            {cartStatus === 'adding' && (
+              <>
+                <div className="loading-animation">
+                  <div className="cart-loader"></div>
+                </div>
+                <h3>Adding Items to Kroger</h3>
+                <p>Please wait while we add your ingredients to your Kroger cart.</p>
+                <div className="progress-bar">
+                  <div className="progress-fill"></div>
+                </div>
                 <button 
                   className="secondary-button" 
                   onClick={() => setCartStatus(null)}
                 >
-                  Continue Making Recipes
+                  Cancel
                 </button>
-              </div>
-            </>
-          )}
+              </>
+            )}
 
-          {cartStatus === 'error' && (
-            <>
-              <div className="status-icon error">
-                <X size={32} />
-              </div>
-              <h3>Connection Error</h3>
-              <p>We couldn't add items to your Kroger cart</p>
-              <p className="error-detail">Please make sure you've logged in with your Kroger account</p>
-              <div className="action-buttons">
-                <button
-                  className="primary-button"
-                  onClick={() => window.open("http://127.0.0.1:5000/login", "_blank")}
-                >
-                  Login with Kroger
-                </button>
-                <button 
-                  className="secondary-button" 
-                  onClick={() => setCartStatus(null)}
-                >
-                  Try Again
-                </button>
-              </div>
-            </>
-          )}
+            {cartStatus === 'success' && (
+              <>
+                <div className="status-icon success">
+                  <Check size={32} />
+                </div>
+                <h3>Success!</h3>
+                <p>All items have been added to your Kroger cart</p>
+                <div className="action-buttons">
+                  <button
+                    className="primary-button"
+                    onClick={() => window.open('https://www.kroger.com/cart', '_blank')}
+                  >
+                    <ShoppingCart size={16} />
+                    Go to Kroger Cart
+                  </button>
+                  <button 
+                    className="secondary-button" 
+                    onClick={() => setCartStatus(null)}
+                  >
+                    Continue Making Recipes
+                  </button>
+                </div>
+              </>
+            )}
+
+            {cartStatus === 'error' && (
+              <>
+                <div className="status-icon error">
+                  <X size={32} />
+                </div>
+                <h3>Connection Error</h3>
+                <p>We couldn't add items to your Kroger cart</p>
+                <p className="error-detail">Please make sure you've logged in with your Kroger account</p>
+                <div className="action-buttons">
+                  <button
+                    className="primary-button"
+                    onClick={() => window.open("http://127.0.0.1:5000/login", "_blank")}
+                  >
+                    Login with Kroger
+                  </button>
+                  <button 
+                    className="secondary-button" 
+                    onClick={() => setCartStatus(null)}
+                  >
+                    Try Again Later
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
-      </div>
-    )}
-  </div>
-  ); // Closing parenthesis for the return statement
-}; // Closing curly brace and semicolon for the arrow function
+      )}
+    </div>
+  );
+};
 
 export default NutrifyAI;
