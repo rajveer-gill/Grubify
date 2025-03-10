@@ -55,17 +55,43 @@ def add_to_cart_route():
         return jsonify({"success": False, "error": "User not logged in to Kroger"}), 401
 
     data = request.json
-    items = data.get("items", [])
-    if not items:
+    ingredients = data.get("items", [])
+    if not ingredients:
         return jsonify({"success": False, "error": "No items provided"}), 400
 
+    # Create a Kroger API instance for product lookup
+    from store_handler import KrogerAPI
+    client_id = "nutrifai-243261243034242e644175722e4a4c397a4e507a454732506e594e366576617532756c356b4741754c48746c31634a59564b784d4f2e364e7743462e3423701595089688646"
+    client_secret = "f8IG7k0gYTJZNfHM9a22vaP0_ytGIYng2Acr9mIu"
+    kroger_api = KrogerAPI(client_id, client_secret)
+    
+    # Get access token for product search
+    search_token = kroger_api.request_token()
+    if not search_token:
+        return jsonify({"success": False, "error": "Failed to authenticate for product search"}), 500
+    
+    # Search for products to get UPCs
+    stores = kroger_api.get_kroger_stores(zip_code="97401", limit=1)
+    if not stores:
+        return jsonify({"success": False, "error": "No Kroger stores found"}), 500
+    
+    store_id = stores[0]["id"]
+    ingredients_str = ",".join(ingredients)
+    products = kroger_api.search_products(ingredients_str, location_id=store_id)
+    
+    # Add items to cart using UPCs
     success_list = []
-    for upc in items:
-        success = add_item_to_cart(user_token, upc, quantity=1, modality="PICKUP")
-        success_list.append(success)
+    for ingredient, details in products.items():
+        upc = details.get("UPC")
+        if upc:
+            success = add_item_to_cart(user_token, upc, quantity=1, modality="PICKUP")
+            success_list.append(success)
+        else:
+            print(f"No UPC found for {ingredient}")
+            success_list.append(False)
 
-    if all(success_list):
-        return jsonify({"success": True, "message": f"Added {len(items)} items to Kroger cart"})
+    if all(success_list) and success_list:
+        return jsonify({"success": True, "message": f"Added {len(success_list)} items to Kroger cart"})
     else:
         return jsonify({"success": False, "error": "One or more items failed to add."})
 

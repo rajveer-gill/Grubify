@@ -1,6 +1,9 @@
 import requests
 import base64
 
+# Define what gets exported when someone imports from this file
+__all__ = ['fetch_ingredient_prices', 'KrogerAPI']
+
 class KrogerAPI:
     def __init__(self, client_id, client_secret):
         """
@@ -9,7 +12,7 @@ class KrogerAPI:
         self.client_id = client_id
         self.client_secret = client_secret
         self.access_token = None
-        self.base_url = "https://api-ce.kroger.com/v1"
+        self.base_url = "https://api.kroger.com/v1"
 
     def get_encoded_credentials(self):
         """
@@ -152,54 +155,54 @@ class KrogerAPI:
 #{'steak': {'UPC': '0001111036547', 'Price': 5.99}, 'egg': {'UPC': '0001111090406', 'Price': 2.99}, 'milk': {'UPC': '0001111050578', 'Price': 2.99}, 'bread': {'UPC': '0001111008415', 'Price': 3.79}}
 
 
-# def fetch_ingredient_prices(ingredients, store="kroger"):
-#     """
-#     Fetch prices for a list of ingredient strings using the KrogerAPI.
-#     Returns a list of dicts, one per ingredient, with 'ingredient', 'productName', and 'price'.
-#     """
-#     from dotenv import load_dotenv
-#     load_dotenv()  # Ensure KROGER_CLIENT_ID, KROGER_CLIENT_SECRET are in .env
+def fetch_ingredient_prices(ingredients, store="kroger"):
+    """
+    Fetch prices for a list of ingredient strings using the KrogerAPI.
+    Returns a list of dicts, one per ingredient, with 'ingredient', 'productName', and 'price'.
+    """
+    from dotenv import load_dotenv
+    load_dotenv()  # Ensure KROGER_CLIENT_ID, KROGER_CLIENT_SECRET are in .env
 
-#     client_id = "nutrify-2432612430342445574c6e2f4174746941377459497376313952524f754958446f585241614a675677526d5646354f547a71502f4631365747572e4b1774410088019709705"
-#     client_secret = "QkJnE0XrFDHIl1Y2BH9H1lFp96BYHU24fFfA2ZTL"
+    client_id = "nutrify-2432612430342445574c6e2f4174746941377459497376313952524f754958446f585241614a675677526d5646354f547a71502f4631365747572e4b1774410088019709705"
+    client_secret = "QkJnE0XrFDHIl1Y2BH9H1lFp96BYHU24fFfA2ZTL"
 
-#     if not client_id or not client_secret:
-#         return {"error": "Kroger credentials not found in environment variables."}
+    if not client_id or not client_secret:
+        return {"error": "Kroger credentials not found in environment variables."}
 
-#     kroger_api = KrogerAPI(client_id, client_secret)
-#     token = kroger_api.request_token()
-#     if not token:
-#         return {"error": "Failed to obtain Kroger API token."}
+    kroger_api = KrogerAPI(client_id, client_secret)
+    token = kroger_api.request_token()
+    if not token:
+        return {"error": "Failed to obtain Kroger API token."}
 
-#     # For now, pick the first store near a default ZIP code, e.g. 97401
-#     stores = kroger_api.get_kroger_stores(zip_code="97401", limit=1)
-#     if not stores:
-#         return {"error": "No Kroger stores found near ZIP code 97401."}
-#     store_id = stores[0]["id"]
+    # For now, pick the first store near a default ZIP code, e.g. 97401
+    stores = kroger_api.get_kroger_stores(zip_code="97401", limit=1)
+    if not stores:
+        return {"error": "No Kroger stores found near ZIP code 97401."}
+    store_id = stores[0]["id"]
 
-#     # Search for each ingredient and gather the first matching product + price
-#     results = []
-#     for ing in ingredients:
-#         products = kroger_api.search_products(
-#             search_terms=ing,
-#             location_id=store_id,
-#             limit=1
-#         )
-#         if products:
-#             product = products[0]
-#             results.append({
-#                 "ingredient": ing,
-#                 "productName": product["name"],
-#                 "price": product["price"],
-#             })
-#         else:
-#             # If no product found, return a None entry
-#             results.append({
-#                 "ingredient": ing,
-#                 "productName": None,
-#                 "price": None,
-#             })
-#     return results
+    # Search for each ingredient and gather the first matching product + price
+    results = []
+    for ing in ingredients:
+        products = kroger_api.search_products(
+            search_terms=ing,
+            location_id=store_id,
+            limit=1
+        )
+        if products:
+            product = products[0]
+            results.append({
+                "ingredient": ing,
+                "productName": product["name"],
+                "price": product["price"],
+            })
+        else:
+            # If no product found, return a None entry
+            results.append({
+                "ingredient": ing,
+                "productName": None,
+                "price": None,
+            })
+    return results
 
 # I didn't make this but I didn't want to delete it either
 
