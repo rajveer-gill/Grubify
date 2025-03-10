@@ -429,36 +429,19 @@ const NutrifyAI = () => {
           <ChevronDown className="dropdown-icon" size={16} />
         </div>
         
-        {/* Navigation menu - simplified to only Past Recipes */}
+        {/* Navigation menu */}
         <div className="nav-menu">
           <button 
             className="nav-item"
             onClick={() => setCurrentView('pastRecipes')}
           >
             <Compass size={16} />
-            <span>Past Recipes</span>
+            <span>Recipe History</span>
           </button>
         </div>
-        
-        {/* History sections */}
-        <div className="history-container">
-          <h3 className="history-title">Previous 30 Days</h3>
-          <button className="history-item">Grilled Salmon with Asparagus</button>
-          <button className="history-item">Mediterranean Chicken Bowl</button>
-          <button className="history-item">Quinoa Vegetable Stir-Fry</button>
-          <button className="history-item">Avocado Toast with Poached Eggs</button>
-          
-          <div className="divider"></div>
-          
-          <h3 className="history-title">January</h3>
-          <button className="history-item">Healthy Breakfast Ideas</button>
-          <button className="history-item">Low-carb Dinner Recipes</button>
-          <button className="history-item">Vitamin Deficiency Symptoms</button>
-          <button className="history-item">Calorie Tracking Tips</button>
-        </div>
-        
-        {/* Login button */}
-        <div className="sidebar-footer">
+
+        {/* Login button moved up, with proper styling */}
+        <div className="nav-item-container" style={{ padding: "15px 20px", marginBottom: "20px" }}>
           <button
             className="upgrade-button"
             onClick={() => window.open("http://127.0.0.1:5000/login", "_blank")}
@@ -468,7 +451,7 @@ const NutrifyAI = () => {
           </button>
         </div>
       </div>
-      
+
       {/* ---------- MAIN CONTENT ---------- */}
       <div className="main-content">
         {/* Profile icon in top-right */}
