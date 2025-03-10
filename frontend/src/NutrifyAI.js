@@ -646,7 +646,7 @@ const NutrifyAI = () => {
                   className="secondary-button" 
                   onClick={() => setCartStatus(null)}
                 >
-                  Try Again Later
+                  Try Again
                 </button>
               </div>
             </>
