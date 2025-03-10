@@ -1,5 +1,18 @@
 import React, { useState } from 'react';
-import { MessageCircle, Compass, ChevronDown, Info, User, ShoppingCart, ArrowLeft, Search, Save, X, Check, Send } from 'lucide-react';
+import {
+  MessageCircle,
+  Compass,
+  ChevronDown,
+  Info,
+  User,
+  ShoppingCart,
+  ArrowLeft,
+  Search,
+  Save,
+  X,
+  Check,
+  Send
+} from 'lucide-react';
 import './NutrifyAI.css';
 
 const NutrifyAI = () => {
@@ -12,6 +25,7 @@ const NutrifyAI = () => {
   const [chatInput, setChatInput] = useState('');
   const [modificationLoading, setModificationLoading] = useState(false);
   const [chatHistory, setChatHistory] = useState([]);
+  const [cartStatus, setCartStatus] = useState(null); // NEW state for cart overlay status
   
   // Sample recipe data as fallback
   const sampleRecipe = {
@@ -70,9 +84,9 @@ const NutrifyAI = () => {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           original_recipe: originalRecipe,
-          modifications: modifications 
+          modifications: modifications
         }),
       });
       
@@ -96,9 +110,9 @@ const NutrifyAI = () => {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           ingredients: ingredients.map(ing => ing.name),
-          store 
+          store
         }),
       });
       
@@ -126,7 +140,7 @@ const NutrifyAI = () => {
       });
       
       if (!response.ok) {
-        throw new Error('Failed to add items to cart');
+        throw new Error('click the login with kroger button to authenticate');
       }
       
       return await response.json();
@@ -152,7 +166,6 @@ const NutrifyAI = () => {
         ...recipe,
         ingredients: recipe.ingredients.map(ingredient => ({
           ...ingredient,
-          /*inPantry: Math.random() > 0.6, // Random true/false, weighted toward false*/
           confirmed: true,
         })),
       };
@@ -185,7 +198,7 @@ const NutrifyAI = () => {
     
     // Add user message to chat history
     const newMessage = { 
-      text: chatInput, 
+      text: chatInput,
       sender: 'user',
       timestamp: new Date().toISOString()
     };
@@ -197,7 +210,7 @@ const NutrifyAI = () => {
       // Call the API to modify the recipe
       const modifiedRecipe = await modifyRecipeFromAPI(currentRecipe, chatInput);
       
-      // Keep pantry status and confirmation status for ingredients that exist in both recipes
+      // Keep pantry status and confirmation for ingredients that exist in both recipes
       const updatedRecipe = {
         ...modifiedRecipe,
         ingredients: modifiedRecipe.ingredients.map(newIngredient => {
@@ -216,9 +229,9 @@ const NutrifyAI = () => {
       
       // Add system response to chat history
       setChatHistory(prevHistory => [
-        ...prevHistory, 
+        ...prevHistory,
         { 
-          text: `Recipe updated: "${modifiedRecipe.name}"`, 
+          text: `Recipe updated: "${modifiedRecipe.name}"`,
           sender: 'system',
           timestamp: new Date().toISOString()
         }
@@ -230,9 +243,9 @@ const NutrifyAI = () => {
       
       // Add error message to chat history
       setChatHistory(prevHistory => [
-        ...prevHistory, 
+        ...prevHistory,
         { 
-          text: "Sorry, I couldn't modify the recipe. Please try a different request.", 
+          text: "Sorry, I couldn't modify the recipe. Please try a different request.",
           sender: 'system',
           timestamp: new Date().toISOString(),
           isError: true
@@ -243,16 +256,16 @@ const NutrifyAI = () => {
     }
   };
   
-  // Handle removing an ingredient
+  // Handle removing an ingredient (unused in final UI, but kept here if needed)
   const handleRemoveIngredient = (indexToRemove) => {
-    const updatedRecipe = {...currentRecipe};
+    const updatedRecipe = { ...currentRecipe };
     updatedRecipe.ingredients = updatedRecipe.ingredients.filter((_, index) => index !== indexToRemove);
     setCurrentRecipe(updatedRecipe);
   };
   
   // Handle confirming an ingredient
   const handleConfirmIngredient = (index) => {
-    const updatedRecipe = {...currentRecipe};
+    const updatedRecipe = { ...currentRecipe };
     updatedRecipe.ingredients[index].confirmed = !updatedRecipe.ingredients[index].confirmed;
     setCurrentRecipe(updatedRecipe);
   };
@@ -262,31 +275,33 @@ const NutrifyAI = () => {
     const confirmedIngredients = currentRecipe.ingredients
       .filter(ing => ing.confirmed && !ing.inPantry)
       .map(ing => ing.name);
-    
+
     if (confirmedIngredients.length === 0) {
       alert("Please confirm at least one ingredient to order");
       return;
     }
-    
+
     setLoading(true);
+    setCartStatus('adding'); // Show "adding" overlay
+
     try {
       const result = await addItemsToCart(confirmedIngredients, 'kroger');
-      
+
       if (result.success) {
-        alert(`Added to Kroger cart: ${confirmedIngredients.join(', ')}`);
+        setCartStatus('success'); // Show success overlay & "Go to Cart" button
       } else {
-        alert(`Failed to add to Kroger cart: ${result.error || 'Unknown error'}`);
+        setCartStatus('error');   // Show error overlay
       }
     } catch (error) {
-      alert(`Error adding to Kroger cart: ${error.message}`);
+      setCartStatus('error');     // Show error overlay
     } finally {
       setLoading(false);
     }
   };
-  
+
   return (
     <div className="nutrify-container">
-      {/* Simplified sidebar */}
+      {/* ---------- SIDEBAR ---------- */}
       <div className="sidebar">
         <div className="sidebar-header">
           <div className="logo-container">
@@ -310,39 +325,23 @@ const NutrifyAI = () => {
         {/* History sections */}
         <div className="history-container">
           <h3 className="history-title">Previous 30 Days</h3>
-          <button className="history-item">
-            Grilled Salmon with Asparagus
-          </button>
-          <button className="history-item">
-            Mediterranean Chicken Bowl
-          </button>
-          <button className="history-item">
-            Quinoa Vegetable Stir-Fry
-          </button>
-          <button className="history-item">
-            Avocado Toast with Poached Eggs
-          </button>
+          <button className="history-item">Grilled Salmon with Asparagus</button>
+          <button className="history-item">Mediterranean Chicken Bowl</button>
+          <button className="history-item">Quinoa Vegetable Stir-Fry</button>
+          <button className="history-item">Avocado Toast with Poached Eggs</button>
           
           <div className="divider"></div>
           
           <h3 className="history-title">January</h3>
-          <button className="history-item">
-            Healthy Breakfast Ideas
-          </button>
-          <button className="history-item">
-            Low-carb Dinner Recipes
-          </button>
-          <button className="history-item">
-            Vitamin Deficiency Symptoms
-          </button>
-          <button className="history-item">
-            Calorie Tracking Tips
-          </button>
+          <button className="history-item">Healthy Breakfast Ideas</button>
+          <button className="history-item">Low-carb Dinner Recipes</button>
+          <button className="history-item">Vitamin Deficiency Symptoms</button>
+          <button className="history-item">Calorie Tracking Tips</button>
         </div>
         
-        {/* Upgrade button */}
+        {/* Login button */}
         <div className="sidebar-footer">
-          <button 
+          <button
             className="upgrade-button"
             onClick={() => window.open("http://127.0.0.1:5000/login", "_blank")}
           >
@@ -352,11 +351,11 @@ const NutrifyAI = () => {
         </div>
       </div>
       
-      {/* Main Content */}
+      {/* ---------- MAIN CONTENT ---------- */}
       <div className="main-content">
         {/* Profile icon in top-right */}
         <div className="profile-container">
-          <button 
+          <button
             className="profile-button"
             onClick={() => setProfileOpen(!profileOpen)}
           >
@@ -381,7 +380,7 @@ const NutrifyAI = () => {
           )}
         </div>
         
-        {/* Recipe Input View */}
+        {/* ---------- INPUT VIEW ---------- */}
         {currentView === 'input' && (
           <div className="chat-area">
             <h1 className="main-heading">What would you like to cook today?</h1>
@@ -399,7 +398,7 @@ const NutrifyAI = () => {
                   }}
                 />
                 <div className="center-input-buttons">
-                  <button 
+                  <button
                     className="icon-button"
                     onClick={handleSubmitRecipe}
                     disabled={loading}
@@ -431,17 +430,18 @@ const NutrifyAI = () => {
               {/* Disclaimer */}
               <div className="disclaimer-container">
                 <div className="disclaimer">
-                  Nutrify AI helps you find recipes and purchase ingredients from grocery delivery services. Always check for allergens and nutritional information.
+                  Nutrify AI helps you find recipes and purchase ingredients from grocery delivery services.
+                  Always check for allergens and nutritional information.
                 </div>
               </div>
             </div>
           </div>
         )}
         
-        {/* Recipe Details View (second screen) */}
+        {/* ---------- DETAILS VIEW ---------- */}
         {currentView === 'details' && currentRecipe && (
           <div className="recipe-details">
-            <button 
+            <button
               className="back-button"
               onClick={() => setCurrentView('input')}
             >
@@ -454,33 +454,22 @@ const NutrifyAI = () => {
             <div className="recipe-content">
               <div className="ingredients-section">
                 <h2>Ingredients</h2>
-                
                 <div className="ingredients-list">
                   {currentRecipe.ingredients.map((ingredient, index) => (
-                    <div 
-                      key={index} 
+                    <div
+                      key={index}
                       className={`ingredient-item ${ingredient.confirmed ? 'confirmed' : 'unconfirmed'}`}
                     >
                       <span className="ingredient-name">{ingredient.name}</span>
                       <span className="ingredient-amount">{ingredient.amount}</span>
-                      <span className="ingredient-status"></span>
-                      
                       <div className="ingredient-actions">
-                        <button 
+                        <button
                           className={`confirm-button ${ingredient.confirmed ? 'confirmed' : ''}`}
                           onClick={() => handleConfirmIngredient(index)}
                           title={ingredient.confirmed ? "Unconfirm" : "Confirm"}
                         >
                           <Check size={16} />
                         </button>
-                        
-                        {/*<button 
-                          className="remove-button"
-                          onClick={() => handleRemoveIngredient(index)}
-                          title="Remove"
-                        >
-                          <X size={16} />
-                        </button>*/}
                       </div>
                     </div>
                   ))}
@@ -489,15 +478,18 @@ const NutrifyAI = () => {
                 <div className="missing-ingredients">
                   <h3>Ingredients to Purchase</h3>
                   <p>
-                    {currentRecipe.ingredients.filter(i => !i.inPantry).length} items needed 
+                    {currentRecipe.ingredients.filter(i => !i.inPantry).length} items needed
                     ({currentRecipe.ingredients.filter(i => !i.inPantry && i.confirmed).length} confirmed)
                   </p>
                   
                   <div className="grocery-options">
-                    <button 
+                    <button
                       className="grocery-button kroger"
                       onClick={handleOrderWithKroger}
-                      disabled={loading || currentRecipe.ingredients.filter(i => !i.inPantry && i.confirmed).length === 0}
+                      disabled={
+                        loading ||
+                        currentRecipe.ingredients.filter(i => !i.inPantry && i.confirmed).length === 0
+                      }
                     >
                       <ShoppingCart size={16} />
                       <span>Order with Kroger</span>
@@ -520,63 +512,15 @@ const NutrifyAI = () => {
                   <Save size={16} />
                   <span>Save to My Recipes</span>
                 </button>
-                
-                {/* Recipe Modification Chat */}
-                {/* <div className="recipe-chat-container">
-                  <h3>Modify Recipe</h3>
-                  <p className="chat-help-text">
-                    Need adjustments? Ask me to make it spicier, add more protein, make it vegan, etc.
-                  </p>
-                  
-                  {/* Chat History }
-                  {chatHistory.length > 0 && (
-                    <div className="chat-history">
-                      {chatHistory.map((message, index) => (
-                        <div 
-                          key={index} 
-                          className={`chat-message ${message.sender} ${message.isError ? 'error' : ''}`}
-                        >
-                          {message.text}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  
-                  {/* Chat Input }
-                  <div className="chat-input-container">
-                    <input
-                      type="text"
-                      value={chatInput}
-                      onChange={(e) => setChatInput(e.target.value)}
-                      placeholder="How would you like to modify this recipe?"
-                      className="chat-input"
-                      disabled={modificationLoading}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' && !modificationLoading) handleRecipeModification();
-                      }}
-                    />
-                    <button 
-                      className="chat-send-button"
-                      onClick={handleRecipeModification}
-                      disabled={modificationLoading || chatInput.trim() === ''}
-                    >
-                      {modificationLoading ? (
-                        <div className="chat-loading-spinner"></div>
-                      ) : (
-                        <Send size={18} />
-                      )}
-                    </button>
-                  </div>
-                </div> */}
               </div>
             </div>
           </div>
         )}
         
-        {/* Past Recipes View */}
+        {/* ---------- PAST RECIPES VIEW ---------- */}
         {currentView === 'pastRecipes' && (
           <div className="past-recipes">
-            <button 
+            <button
               className="back-button"
               onClick={() => setCurrentView('input')}
             >
@@ -597,7 +541,7 @@ const NutrifyAI = () => {
                     A refreshing Mediterranean-inspired bowl with quinoa, vegetables, and feta.
                   </p>
                   <div className="recipe-card-actions">
-                    <button 
+                    <button
                       className="card-action-button"
                       onClick={() => {
                         setCurrentRecipe({
@@ -612,7 +556,7 @@ const NutrifyAI = () => {
                     >
                       View Recipe
                     </button>
-                    <button 
+                    <button
                       className="card-action-button"
                       onClick={() => {
                         setCurrentRecipe({
@@ -634,8 +578,84 @@ const NutrifyAI = () => {
           </div>
         )}
       </div>
-    </div>
-  );
-};
+      
+{/* ---------- CART STATUS OVERLAYS ---------- */}
+{cartStatus && (
+      <div className="cart-status-overlay">
+        <div className={`cart-status-box ${cartStatus}`}>
+          {cartStatus === 'adding' && (
+            <>
+              <div className="loading-animation">
+                <div className="cart-loader"></div>
+              </div>
+              <h3>Adding Items to Kroger</h3>
+              <p>Please wait while we add your ingredients to your Kroger cart.</p>
+              <div className="progress-bar">
+                <div className="progress-fill"></div>
+              </div>
+              <button 
+                className="secondary-button" 
+                onClick={() => setCartStatus(null)}
+              >
+                Cancel
+              </button>
+            </>
+          )}
+
+          {cartStatus === 'success' && (
+            <>
+              <div className="status-icon success">
+                <Check size={32} />
+              </div>
+              <h3>Success!</h3>
+              <p>All items have been added to your Kroger cart</p>
+              <div className="action-buttons">
+                <button
+                  className="primary-button"
+                  onClick={() => window.open('https://www.kroger.com/cart', '_blank')}
+                >
+                  <ShoppingCart size={16} />
+                  Go to Kroger Cart
+                </button>
+                <button 
+                  className="secondary-button" 
+                  onClick={() => setCartStatus(null)}
+                >
+                  Continue Making Recipes
+                </button>
+              </div>
+            </>
+          )}
+
+          {cartStatus === 'error' && (
+            <>
+              <div className="status-icon error">
+                <X size={32} />
+              </div>
+              <h3>Connection Error</h3>
+              <p>We couldn't add items to your Kroger cart</p>
+              <p className="error-detail">Please make sure you've logged in with your Kroger account</p>
+              <div className="action-buttons">
+                <button
+                  className="primary-button"
+                  onClick={() => window.open("http://127.0.0.1:5000/login", "_blank")}
+                >
+                  Login with Kroger
+                </button>
+                <button 
+                  className="secondary-button" 
+                  onClick={() => setCartStatus(null)}
+                >
+                  Try Again Later
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    )}
+  </div>
+  ); // Closing parenthesis for the return statement
+}; // Closing curly brace and semicolon for the arrow function
 
 export default NutrifyAI;
