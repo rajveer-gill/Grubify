@@ -36,6 +36,7 @@ jobs:
           python3 -m venv venv
           source venv/bin/activate
           pip install -r backend/requirements.txt
+          pip install pytest
 
       # Run pytest for the database
       - name: Run pytest on backend/database_test.py
