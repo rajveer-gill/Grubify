@@ -21,20 +21,25 @@ jobs:
 
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
-      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+      # Checks out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v4
 
+      # Setup Python environment
       - name: Setup Python
         uses: actions/setup-python@v5.4.0
         with:
           python-version: '3.x'
-          
-      # Runs a single command using the runners shell
-      - name: Run a one-line script
-        run: echo Hello, world!
 
-      # Runs a set of commands using the runners shell
-      - name: Run a multi-line script, use Python
+      # Create a virtual environment and install dependencies
+      - name: Create Virtual Environment and Install Dependencies
         run: |
-          echo "This is a multi-line script"
-          python3 -c "print('Hello from python!')"
+          python3 -m venv venv
+          source venv/bin/activate
+          pip install -r backend/requirements.txt
+          pip install pytest
+
+      # Run pytest for the database
+      - name: Run pytest on backend/database_test.py
+        run: |
+          source venv/bin/activate
+          pytest backend/database_test.py
