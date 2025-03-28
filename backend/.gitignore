@@ -1,2 +1,106 @@
+# ========== Python ignores ==========
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyd
+*.pyo
+*.so
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+env.bak/
+venv.bak/
+.Python
+
+# Distribution / packaging
+build/
+dist/
+eggs/
+*.egg-info/
+.eggs/
+wheels/
+share/python-wheels/
+*.egg
+.installed.cfg
+*.manifest
+*.spec
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+cover/
+
+# MyPy, Pyre, Pytype
+.mypy_cache/
+.pyre/
+.pytype/
+
+# Django stuff
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+
+# Flask stuff
+instance/
+.webassets-cache
+
+# Sphinx docs
+docs/_build/
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# ========== Node / React ignores ==========
+
+# Node modules
+node_modules/
+
+# Build output
+build/
+dist/
+.cache/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ========== Environment & Secrets ==========
+
+# Environment variables
+.env
+.env.*
+
+# ========== IDE / Editor / OS files ==========
+
+# macOS
 .DS_Store
-.DS_Store
+
+# Windows
+Thumbs.db
+
+# PyCharm / JetBrains (optional; if you want to exclude .idea)
+# .idea/
+
+# Visual Studio Code (optional)
+# .vscode/
+
