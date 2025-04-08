@@ -164,6 +164,10 @@ def login():
 
 @app.route("/callback")
 def callback():
+    """
+    Kroger redirects here with ?code=XXXX after user logs in.
+    We exchange that code for a user-level token, then store it in session.
+    """
     auth_code = request.args.get("code", None)
     if not auth_code:
         return "No code provided by Kroger."
