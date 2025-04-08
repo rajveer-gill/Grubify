@@ -29,7 +29,22 @@ const NutrifyAI = () => {
   const [recipeSaving, setRecipeSaving] = useState(false); // State to track save recipe operation
   const [pastRecipes, setPastRecipes] = useState([]); // NEW state for past recipes
   const [pastRecipesLoading, setPastRecipesLoading] = useState(false); // NEW state for loading indicator
-  
+  const [krogerSignInAuthed, setKrogerSignInAuthed] = useState(false);
+
+  const getQueryParam = (param) => {
+    const urlParams = new URLSearchParams(window.location.search);
+    return urlParams.get(param);
+  };
+
+  useEffect(() => {
+    // Check if the user was redirected with an auth success parameter
+    const authSuccess = getQueryParam("authSuccess");
+    if (authSuccess === "true") {
+      setKrogerSignInAuthed(true); // Update the button state to green
+      console.log("User authenticated successfully via callback.");
+    }
+  }, []);
+
   // Sample recipe data as fallback
   const sampleRecipe = {
     name: "Mediterranean Quinoa Bowl",
@@ -440,14 +455,17 @@ const NutrifyAI = () => {
           </button>
         </div>
 
-        {/* Login button moved up, with proper styling */}
+        {/* Login button */}
         <div className="nav-item-container" style={{ padding: "15px 20px", marginBottom: "20px" }}>
-          <button
+        <button
             className="upgrade-button"
             onClick={() => window.open("http://127.0.0.1:5000/login", "_blank")}
+            style={{
+              backgroundColor: krogerSignInAuthed ? "green" : "",
+              color: krogerSignInAuthed ? "white" : "",
+            }}
           >
-            <Info size={16} />
-            <span>Login with Kroger</span>
+            <span>{krogerSignInAuthed ? "Logged in Kroger" : "Login with Kroger"}</span>
           </button>
         </div>
       </div>

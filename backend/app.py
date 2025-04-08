@@ -180,6 +180,9 @@ def callback():
     session["kroger_user_token"] = user_token
     print("Token stored in session:", user_token)  # Debugging
 
+    # Redirect back to the React app with a success query parameter
+    return redirect("http://localhost:3000?authSuccess=true")
+
     return """
     <h2>Successfully logged into Kroger!</h2>
     <p>You can now return to the React UI and click "Order with Kroger".</p>
