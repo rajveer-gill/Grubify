@@ -164,10 +164,6 @@ def login():
 
 @app.route("/callback")
 def callback():
-    """
-    Kroger redirects here with ?code=XXXX after user logs in.
-    We exchange that code for a user-level token, then store it in session.
-    """
     auth_code = request.args.get("code", None)
     if not auth_code:
         return "No code provided by Kroger."
@@ -179,6 +175,9 @@ def callback():
     # Store token in session
     session["kroger_user_token"] = user_token
     print("Token stored in session:", user_token)  # Debugging
+
+    # Redirect back to the React app with a success query parameter
+    return redirect("http://localhost:3000?authSuccess=true")
 
     return """
     <h2>Successfully logged into Kroger!</h2>
