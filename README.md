@@ -11,9 +11,9 @@ Requirements:
 1. Make install-run.sh executable with chmod 755 install-run.sh
 2. Run the script with ./install-run.sh
 
-## Using Nutrify
+## Using Grubify
 
-In the web window that opens upon running Nutrify, enter the name of the recipe and click the search icon. When the recipe loads, the user can view the ingredients on the left and the instructions on the right. To add to cart, click the log in to Kroger button on the left side and continue on the Kroger website. Deselect ingredients you already have by clicking the checkmark and then click order with Kroger. To save the recipe, click Save to my recipes and view it in the Recipe history menu.
+In the web window that opens upon running Grubify, enter the name of the recipe and click the search icon. When the recipe loads, the user can view the ingredients on the left and the instructions on the right. To add to cart, click the log in to Kroger button on the left side and continue on the Kroger website. Deselect ingredients you already have by clicking the checkmark and then click order with Kroger. To save the recipe, click Save to my recipes and view it in the Recipe history menu.
 
 ## Directory Structure
 
@@ -27,8 +27,6 @@ In the web window that opens upon running Nutrify, enter the name of the recipe 
 └── frontend/
 ```
 
-## Authors
-Raj Gill, John Moore, Tim Nikolaev, Manu Shukla, Myles Vigil
 
 ## Requirements
 Flask, openai, python-dotenv, requests, selenium, flask-cors, autoprefixer, lucide-react, postcss, react, react-dom, react-scripts, tailwindcss, web-vitals
