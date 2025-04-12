@@ -1,6 +1,6 @@
-# Nutrify
+# Grubify
 
-Nutrify is an application allowing users to create recipes, store them in an organized way, and add them to their cart in the Kroger online store. The system is made up of the frontend written in Node.js and React which handles the user facing UI and the backend written in Python. The frontend and backend are connected through an API where the frontend can call functions in the backend.
+Grubify is an application allowing users to create recipes, store them in an organized way, and add them to their cart in the Kroger online store. The system is made up of the frontend written in Node.js and React which handles the user facing UI and the backend written in Python. The frontend and backend are connected through an API where the frontend can call functions in the backend.
 
 ## Installation Instructions
 
