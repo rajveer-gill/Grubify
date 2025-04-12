@@ -30,7 +30,20 @@ const NutrifyAI = () => {
   const [pastRecipes, setPastRecipes] = useState([]); // NEW state for past recipes
   const [pastRecipesLoading, setPastRecipesLoading] = useState(false); // NEW state for loading indicator
   const [krogerSignInAuthed, setKrogerSignInAuthed] = useState(false);
+  const [store, setStore] = useState("kroger");
 
+
+  const getStoreLink = (ingredientName) => {
+    const query = encodeURIComponent(ingredientName);
+    if (store === "safeway") {
+      return `https://www.safeway.com/shop/search-results.html?q=${query}`;
+    } else if (store === "kroger") {
+      return `https://www.kroger.com/search?query=${query}`;
+    } else {
+      return "#";
+    }
+  };
+  
   const getQueryParam = (param) => {
     const urlParams = new URLSearchParams(window.location.search);
     return urlParams.get(param);
@@ -440,7 +453,7 @@ const NutrifyAI = () => {
           <div className="logo-container">
             <MessageCircle size={16} />
           </div>
-          <span className="logo-text">Nutrify AI</span>
+          <span className="logo-text glow-outline">Grubify</span>
           <ChevronDown className="dropdown-icon" size={16} />
         </div>
         
@@ -569,29 +582,93 @@ const NutrifyAI = () => {
             </button>
             
             <h1 className="recipe-title">{currentRecipe.name}</h1>
+            <div className="store-toggle">
+            <span className="toggle-label">
+              Where do you want to shop?
+              <div className="tooltip-wrapper">
+                <span className="info-icon">ℹ️</span>
+                <div className="tooltip-text">
+                  If you choose Safeway, click the logo next to each ingredient to shop for it.
+                </div>
+              </div>
+            </span>
+
+
+              <div className="store-options">
+                <button
+                  className={`store-btn ${store === 'kroger' ? 'active' : ''}`}
+                  onClick={() => setStore('kroger')}
+                >
+                  Kroger
+                </button>
+                <button
+                  className={`store-btn ${store === 'safeway' ? 'active' : ''}`}
+                  onClick={() => setStore('safeway')}
+                >
+                  Safeway
+                </button>
+              </div>
+              {store === 'safeway' && (
+                <p className="store-helper-text">
+                  🛒 Click the Safeway logo next to each ingredient to shop for it.
+                </p>
+              )}
+
+              {store === 'kroger' && (
+                <p className="store-helper-text">
+                  ✅ Select ingredients by clicking the green check mark next to each one you want us to add to your cart.<br />
+                  🔐 Make sure you’re signed in to Kroger first.<br />
+                  🛒 Then press <strong>Order with Kroger</strong> to build your cart.
+                </p>
+              )}
+
+
+            </div>
+
+
             
             <div className="recipe-content">
               <div className="ingredients-section">
                 <h2>Ingredients</h2>
                 <div className="ingredients-list">
-                  {currentRecipe.ingredients.map((ingredient, index) => (
-                    <div
-                      key={index}
-                      className={`ingredient-item ${ingredient.confirmed ? 'confirmed' : 'unconfirmed'}`}
-                    >
-                      <span className="ingredient-name">{ingredient.name}</span>
-                      <span className="ingredient-amount">{ingredient.amount}</span>
-                      <div className="ingredient-actions">
-                        <button
-                          className={`confirm-button ${ingredient.confirmed ? 'confirmed' : ''}`}
-                          onClick={() => handleConfirmIngredient(index)}
-                          title={ingredient.confirmed ? "Unconfirm" : "Confirm"}
-                        >
-                          <Check size={16} />
-                        </button>
-                      </div>
+                {currentRecipe.ingredients.map((ingredient, index) => (
+                  <div
+                    key={index}
+                    className={`ingredient-item ${ingredient.confirmed ? 'confirmed' : 'unconfirmed'}`}
+                  >
+                    <span className="ingredient-name">{ingredient.name}</span>
+                    <span className="ingredient-amount">{ingredient.amount}</span>
+
+                    {/* 🔽 Only show link if store is Safeway 🔽 */}
+                    {store === 'safeway' && (
+                      <a
+                        href={getStoreLink(ingredient.name)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="safeway-card"
+                        title="Shop this item on Safeway"
+                      >
+                        <img
+                          src="/safeway-logo.svg"
+                          alt="Shop on Safeway"
+                          className="safeway-logo"
+                        />
+                      </a>
+                    )}
+
+                    <div className="ingredient-actions">
+                      <button
+                        className={`confirm-button ${ingredient.confirmed ? 'confirmed' : ''}`}
+                        onClick={() => handleConfirmIngredient(index)}
+                        title={ingredient.confirmed ? "Unconfirm" : "Confirm"}
+                      >
+                        <Check size={16} />
+                      </button>
                     </div>
-                  ))}
+                  </div>
+                ))}
+
+
                 </div>
                 
                 <div className="missing-ingredients">
@@ -601,19 +678,21 @@ const NutrifyAI = () => {
                     ({currentRecipe.ingredients.filter(i => !i.inPantry && i.confirmed).length} confirmed)
                   </p>
                   
-                  <div className="grocery-options">
-                    <button
-                      className="grocery-button kroger"
-                      onClick={handleOrderWithKroger}
-                      disabled={
-                        loading ||
-                        currentRecipe.ingredients.filter(i => !i.inPantry && i.confirmed).length === 0
-                      }
-                    >
-                      <ShoppingCart size={16} />
-                      <span>Order with Kroger</span>
-                    </button>
-                  </div>
+                  {store === 'kroger' && (
+                    <div className="grocery-options">
+                      <button
+                        className="grocery-button kroger"
+                        onClick={handleOrderWithKroger}
+                        disabled={
+                          loading ||
+                          currentRecipe.ingredients.filter(i => !i.inPantry && i.confirmed).length === 0
+                        }
+                      >
+                        <ShoppingCart size={16} />
+                        <span>Order with Kroger</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
               
