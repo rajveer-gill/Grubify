@@ -1,4 +1,12 @@
 import React, { useState, useEffect } from 'react';
+import { auth, provider } from "./firebase";
+import { signInWithPopup, signOut } from "firebase/auth";
+import { useAuth } from "./hooks/useAuth";
+import Modal from 'react-modal';
+import toast from 'react-hot-toast';
+import { db } from './firebase'; // already good
+import { collection, addDoc, getDocs, getDocsFromCache } from 'firebase/firestore';
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from "firebase/auth";
 import {
   MessageCircle,
   Compass,
@@ -15,6 +23,9 @@ import {
 } from 'lucide-react';
 import './NutrifyAI.css';
 
+Modal.setAppElement('#root');
+
+
 const NutrifyAI = () => {
   const [inputValue, setInputValue] = useState('');
   const [currentView, setCurrentView] = useState('input'); // 'input', 'details', or 'pastRecipes'
@@ -30,7 +41,77 @@ const NutrifyAI = () => {
   const [pastRecipes, setPastRecipes] = useState([]); // NEW state for past recipes
   const [pastRecipesLoading, setPastRecipesLoading] = useState(false); // NEW state for loading indicator
   const [krogerSignInAuthed, setKrogerSignInAuthed] = useState(false);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [store, setStore] = useState("kroger");
+  const user = useAuth();
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
+  useEffect(() => {
+    if (user && isModalOpen) {
+      setIsModalOpen(false);
+    }
+  }, [user, isModalOpen]);
+  
+
+  const handleGoogleLogin = async () => {
+    try {
+      await signInWithPopup(auth, provider);
+      toast.success('Signed in successfully!');
+    } catch (err) {
+      toast.error('Login failed.');
+      console.error("Login failed:", err);
+    }
+  };
+  
+  const handleEmailLogin = async () => {
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+      toast.success('Welcome back!');
+    } catch (err) {
+      toast.error('Email login failed.');
+      console.error(err);
+    }
+  };
+  
+  const handleEmailSignup = async () => {
+    try {
+      await createUserWithEmailAndPassword(auth, email, password);
+      toast.success('Account created!');
+    } catch (err) {
+      toast.error('Signup failed.');
+      console.error(err);
+    }
+  };
+
+  const handleSaveRecipe = async () => {
+    if (!user || !currentRecipe) return;
+  
+    try {
+      const recipesRef = collection(db, 'users', user.uid, 'recipes');
+      await addDoc(recipesRef, {
+        name: currentRecipe.name,
+        ingredients: currentRecipe.ingredients,
+        instructions: currentRecipe.instructions,
+        dateCreated: new Date()
+      });
+  
+      toast.success("Recipe saved to your account!");
+    } catch (err) {
+      console.error("Error saving recipe:", err);
+      toast.error("Failed to save recipe.");
+    }
+  };  
+  
+
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+    } catch (err) {
+      console.error("Logout failed:", err);
+    }
+  };
+
 
 
   const getStoreLink = (ingredientName) => {
@@ -83,41 +164,43 @@ const NutrifyAI = () => {
   const API_URL = 'http://127.0.0.1:5000';
   // NEW Function to fetch past recipes
   const fetchPastRecipes = async () => {
+    if (!user) return;
+  
     setPastRecipesLoading(true);
     try {
-      const response = await fetch(`${API_URL}/get-past`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include',
-      });
-      
-      if (!response.ok) {
-        throw new Error('Failed to fetch past recipes');
+      const queryRef = collection(db, "users", user.uid, "recipes");
+  
+      let snapshot;
+      try {
+        // Try to load from cache first
+        snapshot = await getDocsFromCache(queryRef);
+        if (snapshot.empty) {
+          // Fallback to server if cache is empty
+          snapshot = await getDocs(queryRef);
+        }
+      } catch (cacheError) {
+        // If cache fails, go straight to server
+        snapshot = await getDocs(queryRef);
       }
-      
-      const data = await response.json();
-      
-      // Format the recipes properly
-      const formattedRecipes = data.map(item => ({
-        ...item.recipe,
-        // Ensure ingredients have the confirmed property
-        ingredients: item.recipe.ingredients.map(ing => ({
+  
+      const recipes = snapshot.docs.map((doc) => ({
+        ...doc.data(),
+        id: doc.id,
+        ingredients: doc.data().ingredients.map((ing) => ({
           ...ing,
           confirmed: false
         }))
       }));
-      
-      setPastRecipes(formattedRecipes);
-    } catch (error) {
-      console.error('Error fetching past recipes:', error);
-      // Use empty array if error occurs
+  
+      setPastRecipes(recipes);
+    } catch (err) {
+      console.error("Error fetching recipes:", err);
       setPastRecipes([]);
     } finally {
       setPastRecipesLoading(false);
     }
   };
+  
   
   // Fetch past recipes when visiting the Past Recipes view
   useEffect(() => {
@@ -225,28 +308,6 @@ const NutrifyAI = () => {
     }
   };
   
-  // Function to save recipe to database
-  const saveRecipeToDatabase = async (recipe) => {
-    try {
-      const response = await fetch(`${API_URL}/save-recipe`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ recipe }),
-        credentials: 'include',
-      });
-      
-      if (!response.ok) {
-        throw new Error('Failed to save recipe');
-      }
-      
-      return await response.json();
-    } catch (error) {
-      console.error('Error saving recipe:', error);
-      return { success: false, error: error.message };
-    }
-  };
   
   // Handle recipe submission with API call
   const handleSubmitRecipe = async () => {
@@ -397,38 +458,6 @@ const NutrifyAI = () => {
     }
   };
 
-  // Handler for saving recipe
-  const handleSaveRecipe = async () => {
-    if (!currentRecipe) return;
-    
-    // Set saving state - used internally, not displayed in UI
-    setRecipeSaving(true);
-    
-    try {
-      // Prepare recipe data for saving
-      const recipeToSave = {
-        name: currentRecipe.name,
-        ingredients: currentRecipe.ingredients.map(ing => ({
-          name: ing.name,
-          amount: ing.amount,
-          inPantry: ing.inPantry
-        })),
-        instructions: currentRecipe.instructions,
-        dateCreated: new Date().toISOString()
-      };
-      
-      // Call API to save recipe
-      const result = await saveRecipeToDatabase(recipeToSave);
-      
-      console.log("Recipe saved:", result);
-      
-    } catch (error) {
-      console.error("Error saving recipe:", error);
-    } finally {
-      setRecipeSaving(false);
-    }
-  };
-
   // Helper function to format date
   const formatDate = (dateString) => {
     const date = new Date(dateString);
@@ -459,13 +488,15 @@ const NutrifyAI = () => {
         
         {/* Navigation menu */}
         <div className="nav-menu">
-          <button 
-            className="nav-item"
-            onClick={() => setCurrentView('pastRecipes')}
-          >
-            <Compass size={16} />
-            <span>Recipe History</span>
-          </button>
+          {user && (
+            <button 
+              className="nav-item"
+              onClick={() => setCurrentView('pastRecipes')}
+            >
+              <Compass size={16} />
+              <span>Recipe History</span>
+            </button>
+          )}
         </div>
 
         {/* Login button */}
@@ -481,36 +512,25 @@ const NutrifyAI = () => {
             <span>{krogerSignInAuthed ? "Logged in Kroger" : "Login with Kroger"}</span>
           </button>
         </div>
+        <div className="sidebar-auth">
+          {user ? (
+            <>
+              <div className="user-email">👋 Welcome back, <strong>{user.displayName || user.email}</strong></div>
+              <button className="auth-button" onClick={handleLogout}>Log Out</button>
+            </>
+          ) : (
+            <button className="auth-button" onClick={() => setIsModalOpen(true)}>
+              Sign In
+            </button>
+          )}
+        </div>
+
+
       </div>
 
       {/* ---------- MAIN CONTENT ---------- */}
       <div className="main-content">
         {/* Profile icon in top-right */}
-        <div className="profile-container">
-          <button
-            className="profile-button"
-            onClick={() => setProfileOpen(!profileOpen)}
-          >
-            <User size={20} />
-          </button>
-          
-          {/* Profile dropdown */}
-          {profileOpen && (
-            <div className="profile-dropdown">
-              <div className="profile-header">
-                <span>John Doe</span>
-                <span className="profile-email">john.doe@example.com</span>
-              </div>
-              <div className="profile-section">
-                <button className="profile-option">Profile Settings</button>
-                <button className="profile-option">Order History</button>
-                <button className="profile-option">Saved Recipes</button>
-                <button className="profile-option">My Pantry</button>
-                <button className="profile-option">Sign Out</button>
-              </div>
-            </div>
-          )}
-        </div>
         
         {/* ---------- INPUT VIEW ---------- */}
         {currentView === 'input' && (
@@ -562,7 +582,7 @@ const NutrifyAI = () => {
               {/* Disclaimer */}
               <div className="disclaimer-container">
                 <div className="disclaimer">
-                  Nutrify AI helps you find recipes and purchase ingredients from grocery delivery services.
+                  Grubify helps you find recipes and purchase ingredients from grocery delivery services.
                   Always check for allergens and nutritional information.
                 </div>
               </div>
@@ -880,6 +900,57 @@ const NutrifyAI = () => {
           </div>
         </div>
       )}
+      <Modal
+        isOpen={isModalOpen}
+        onRequestClose={() => setIsModalOpen(false)}
+        contentLabel="Login Modal"
+        className="login-modal"
+        overlayClassName="login-overlay"
+      >
+        <div className="auth-card">
+          <h3 className="auth-title">Log In to Save Recipes</h3>
+          <input
+            type="email"
+            placeholder="Email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="auth-input"
+          />
+          <input
+            type="password"
+            placeholder="Password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="auth-input"
+          />
+          <button className="auth-button primary" onClick={handleEmailLogin}>Log In</button>
+          <button className="auth-button secondary" onClick={handleEmailSignup}>Sign Up</button>
+          <div className="auth-divider">or</div>
+          <button className="auth-button google" onClick={handleGoogleLogin}>
+            <span className="google-icon" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="20"
+                height="20"
+                viewBox="0 0 48 48"
+              >
+                <path fill="#EA4335" d="M24 9.5c3.13 0 5.89 1.08 8.09 2.85l6.03-6.03C34.6 2.55 29.67 0 24 0 14.61 0 6.69 5.73 2.69 14.01l7.05 5.48C11.94 13.13 17.5 9.5 24 9.5z"/>
+                <path fill="#4285F4" d="M46.5 24c0-1.34-.11-2.64-.3-3.9H24v7.39h12.75c-.56 3.01-2.22 5.56-4.69 7.28l7.21 5.61C43.6 35.3 46.5 30.1 46.5 24z"/>
+                <path fill="#FBBC05" d="M9.74 28.49c-.47-1.4-.74-2.89-.74-4.49s.27-3.09.74-4.49L2.69 14.01C1.03 17.3 0 20.97 0 24.99c0 4.02 1.03 7.69 2.69 10.98l7.05-5.48z"/>
+                <path fill="#34A853" d="M24 48c5.67 0 10.44-1.87 13.92-5.1l-7.21-5.61c-2.01 1.34-4.58 2.12-6.71 2.12-6.5 0-12.06-3.63-14.26-8.99l-7.05 5.48C6.69 42.27 14.61 48 24 48z"/>
+                <path fill="none" d="M0 0h48v48H0z"/>
+              </svg>
+              Sign in with Google
+            </span>
+          </button>
+
+          <button className="auth-button secondary" style={{ marginTop: "10px" }} onClick={() => setIsModalOpen(false)}>
+            Cancel
+          </button>
+        </div>
+      </Modal>
+
+      
     </div>
   );
 };
