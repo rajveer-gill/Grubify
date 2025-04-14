@@ -172,27 +172,34 @@ const NutrifyAI = () => {
   
       let snapshot;
       try {
-        // Try to load from cache first
         snapshot = await getDocsFromCache(queryRef);
         if (snapshot.empty) {
-          // Fallback to server if cache is empty
           snapshot = await getDocs(queryRef);
         }
-      } catch (cacheError) {
-        // If cache fails, go straight to server
+      } catch {
         snapshot = await getDocs(queryRef);
       }
   
-      const recipes = snapshot.docs.map((doc) => ({
-        ...doc.data(),
-        id: doc.id,
-        ingredients: doc.data().ingredients.map((ing) => ({
-          ...ing,
-          confirmed: false
-        }))
-      }));
+      const recipeMap = new Map();
   
-      setPastRecipes(recipes);
+      snapshot.docs.forEach((doc) => {
+        const data = doc.data();
+        const key = `${data.name}-${JSON.stringify(data.ingredients)}`;
+        if (!recipeMap.has(key)) {
+          recipeMap.set(key, {
+            ...data,
+            id: doc.id,
+            ingredients: data.ingredients.map((ing) => ({
+              ...ing,
+              confirmed: false
+            }))
+          });
+        }
+      });
+  
+      const uniqueRecipes = Array.from(recipeMap.values());
+  
+      setPastRecipes(uniqueRecipes);
     } catch (err) {
       console.error("Error fetching recipes:", err);
       setPastRecipes([]);
@@ -200,6 +207,7 @@ const NutrifyAI = () => {
       setPastRecipesLoading(false);
     }
   };
+  
   
   
   // Fetch past recipes when visiting the Past Recipes view
