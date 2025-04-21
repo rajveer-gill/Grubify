@@ -40,12 +40,15 @@ body {
 .logo-container {
   width: 28px;
   height: 28px;
-  background-color: #22c55e;
-  border-radius: 6px;
+  background: transparent !important; /* This clears any background color */
   display: flex;
   align-items: center;
   justify-content: center;
+  border-radius: 4px;
 }
+
+
+
 
 .logo-text {
   font-weight: 500;
@@ -250,22 +253,6 @@ body {
   max-width: 600px;
 }
 
-.center-input-wrapper {
-  position: relative;
-  margin-top: 20px;
-}
-
-.center-text-input {
-  width: 100%;
-  background-color: rgba(255, 255, 255, 0.1);
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  padding: 16px 20px;
-  padding-right: 80px;
-  color: white;
-  font-size: 16px;
-}
-
 .center-text-input:focus {
   outline: none;
   border-color: rgba(255, 255, 255, 0.3);
@@ -281,24 +268,62 @@ body {
   align-items: center;
 }
 
+.center-input-container {
+  position: relative;
+  width: 100%;
+  display: flex;
+  align-items: center;
+}
+
+.center-input-wrapper {
+  display: flex;
+  align-items: center;
+  position: relative;
+  width: 100%;
+  max-width: 600px;
+  margin: 0 auto;
+  border-radius: 8px;
+  background: #1d1d1d;
+  border: 1px solid #333;
+}
+
+.center-text-input {
+  width: 100%;
+  padding: 12px 16px;
+  padding-right: 40px;
+  border-radius: 8px;
+  background: #1a1a1a;
+  border: 1px solid #444;
+  color: white;
+}
+
 .icon-button {
-  background: none;
-  border: none;
-  color: rgba(255, 255, 255, 0.6);
+  position: absolute;
+  right: 12px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: transparent;
+  border: 1px solid #333; /* subtle green border */
   cursor: pointer;
-  margin-left: 8px;
-  width: 36px;
-  height: 36px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 50%;
+  transition: background 0.2s ease;
 }
 
 .icon-button:hover {
-  color: white;
-  background-color: rgba(255, 255, 255, 0.1);
+  background: rgba(76, 175, 80, 0.1); /* light green on hover */
 }
+
+.icon-button svg {
+  color: #333; /* Makes the magnifying glass white */
+  width: 18px;
+  height: 18px;
+}
+
+
+
 
 .disclaimer-container {
   width: 100%;
@@ -469,15 +494,37 @@ body {
   color: white;
 }
 
-.instructions-list {
-  padding-left: 24px;
-  color: rgba(255, 255, 255, 0.8);
+.instructions-dropdown {
+  margin-top: 1rem;
 }
 
-.instruction-step {
-  margin-bottom: 16px;
-  line-height: 1.5;
+.instructions-toggle {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background-color: #1f1f1f;
+  color: #90ee90;
+  padding: 0.75rem 1rem;
+  border: none;
+  border-radius: 8px;
+  font-size: 1.1rem;
+  width: 100%;
+  cursor: pointer;
+  font-weight: bold;
+  transition: background 0.2s;
 }
+
+.instructions-toggle:hover {
+  background-color: #2c2c2c;
+}
+
+
+
+.instruction-step {
+  margin-bottom: 0.5rem;
+  line-height: 1.6;
+}
+
 
 .save-recipe-button {
   display: flex;
@@ -518,8 +565,14 @@ body {
 .recipe-history-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 20px;
+  gap: 24px;
+  direction: rtl; /* 👈 this is the key */
 }
+.recipe-history-grid > * {
+  direction: ltr; /* 👈 flips back each child to normal left-to-right */
+}
+
+
 
 .recipe-card {
   background-color: rgba(255, 255, 255, 0.05);
@@ -582,6 +635,23 @@ body {
 .card-action-button:hover {
   background-color: rgba(255, 255, 255, 0.15);
 }
+
+.recipe-button {
+  background-color: #e74c3c; /* red color for delete */
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 8px;
+  margin: 5px;
+  cursor: pointer;
+  font-weight: bold;
+  transition: background-color 0.3s ease;
+}
+
+.recipe-button:hover {
+  background-color: #c0392b;
+}
+
 
 /* Add ingredient button and form styles */
 .ingredients-header {
@@ -1120,22 +1190,24 @@ body {
   border-radius: 12px;
   padding: 8px;
   margin-top: 0.5rem;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
   text-decoration: none;
   width: 50px;
-  height: 50px;
+  height: 20px;
+  box-shadow: 0 0 8px rgba(255, 79, 79, 1.2); /* 🔴 red glow */
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
 .safeway-card:hover {
-  transform: scale(1.05);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  transform: scale(1.1);
+  box-shadow: 0 0 12px rgba(255, 79, 79, 1.5); /* 🔥 brighter on hover */
 }
 
 .safeway-logo {
-  width: 48px;
-  height: 48px;
+  width: 40px;
+  height: 40px;
   object-fit: contain;
 }
+
 
 .store-helper-text {
   margin-top: 0.5rem;
@@ -1302,6 +1374,21 @@ body {
   margin: 6px 0;
 }
 
+.forgot-password-text {
+  color: #4caf50;
+  text-align: center;
+  margin-top: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  text-decoration: underline;
+}
+
+.forgot-password-text:hover {
+  text-decoration: none;
+}
+
+
+
 /* Google Button Styling */
 .auth-button.google {
   display: flex;
@@ -1376,6 +1463,75 @@ body {
   box-shadow: 0 0 8px rgba(76, 175, 80, 0.5);
 }
 
+.autocomplete-list {
+  background: #1e1e1e;
+  border: 1px solid #4caf50;
+  border-radius: 8px;
+  margin-top: 4px;
+  list-style: none;
+  padding: 0;
+  max-height: 160px;
+  overflow-y: auto;
+  position: absolute;
+  width: 100%;
+  z-index: 5;
+}
+
+.autocomplete-item {
+  padding: 10px 14px;
+  color: white;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.autocomplete-item:hover {
+  background-color: #2f2f2f;
+}
+
+.instructions-list {
+  max-height: 0;
+  overflow: hidden;
+  opacity: 0;
+  transition: max-height 0.4s ease, opacity 0.3s ease;
+}
+
+.instructions-list.open {
+  max-height: 800px; /* Adjust depending on your content */
+  opacity: 1;
+}
+
+.toggle-icon {
+  display: inline-block;
+  transition: transform 0.3s ease;
+}
+
+.toggle-icon.rotate {
+  transform: rotate(180deg);
+}
+
+.logout-container {
+  margin-top: auto;
+  padding: 20px;
+}
+
+.logout-button {
+  background-color: #1f1f1f;
+  color: #b7f5c1;
+  border: 1.5px solid #4caf50;
+  border-radius: 999px;
+  padding: 10px 18px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  width: 100%;
+}
+
+.logout-button:hover {
+  background-color: #4caf50;
+  color: black;
+  box-shadow: 0 0 8px rgba(76, 175, 80, 0.5);
+}
 
 
 

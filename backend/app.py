@@ -178,7 +178,7 @@ def callback():
 
     # Store token in session
     session["kroger_user_token"] = user_token
-    print("Token stored in session:", user_token)  # Debugging
+    #print("Token stored in session:", user_token) 
 
     # Redirect back to the React app with a success query parameter
     return redirect("http://localhost:3000?authSuccess=true")

@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { auth, provider } from "./firebase";
-import { signInWithPopup, signOut } from "firebase/auth";
+import { signInWithPopup, signOut, sendEmailVerification, fetchSignInMethodsForEmail, sendPasswordResetEmail} from "firebase/auth";
 import { useAuth } from "./hooks/useAuth";
 import Modal from 'react-modal';
 import toast from 'react-hot-toast';
 import { db } from './firebase'; // already good
-import { collection, addDoc, getDocs, getDocsFromCache } from 'firebase/firestore';
+import { doc, updateDoc, deleteDoc, collection, addDoc, getDocs, getDocsFromCache } from 'firebase/firestore';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from "firebase/auth";
 import {
   MessageCircle,
@@ -24,6 +24,7 @@ import {
 import './NutrifyAI.css';
 
 Modal.setAppElement('#root');
+
 
 
 const NutrifyAI = () => {
@@ -46,6 +47,39 @@ const NutrifyAI = () => {
   const [store, setStore] = useState("kroger");
   const user = useAuth();
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [instructionsOpen, setInstructionsOpen] = useState(false);
+  const [isResetModalOpen, setIsResetModalOpen] = useState(false);
+  const [resetEmail, setResetEmail] = useState('');
+  const [filteredSuggestions, setFilteredSuggestions] = useState([]);
+  
+
+  useEffect(() => {
+    if (inputValue.length === 0) {
+      setFilteredSuggestions([]);
+      return;
+    }
+  
+    const fetchSuggestions = async () => {
+      try {
+        const res = await fetch(`https://www.themealdb.com/api/json/v1/1/search.php?s=${inputValue}`);
+        const data = await res.json();
+        if (data.meals) {
+          const suggestions = data.meals.map((meal) => meal.strMeal);
+          setFilteredSuggestions(suggestions);
+        } else {
+          setFilteredSuggestions([]);
+        }
+      } catch (err) {
+        console.error("Error fetching suggestions:", err);
+        setFilteredSuggestions([]);
+      }
+    };
+  
+    const timeout = setTimeout(fetchSuggestions, 300); // debounce
+    return () => clearTimeout(timeout);
+  }, [inputValue]);
+  
+
 
   useEffect(() => {
     if (user && isModalOpen) {
@@ -66,23 +100,35 @@ const NutrifyAI = () => {
   
   const handleEmailLogin = async () => {
     try {
-      await signInWithEmailAndPassword(auth, email, password);
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      const user = userCredential.user;
+  
+      if (!user.emailVerified) {
+        toast.error('Please verify your email before logging in.');
+        return;
+      }
+  
       toast.success('Welcome back!');
     } catch (err) {
       toast.error('Email login failed.');
       console.error(err);
     }
-  };
+  };  
   
   const handleEmailSignup = async () => {
     try {
-      await createUserWithEmailAndPassword(auth, email, password);
-      toast.success('Account created!');
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      const user = userCredential.user;
+  
+      await user.sendEmailVerification();
+      toast.success('Account created! Please verify your email before continuing.');
     } catch (err) {
       toast.error('Signup failed.');
       console.error(err);
     }
   };
+
+  
 
   const handleSaveRecipe = async () => {
     if (!user || !currentRecipe) return;
@@ -93,15 +139,30 @@ const NutrifyAI = () => {
         name: currentRecipe.name,
         ingredients: currentRecipe.ingredients,
         instructions: currentRecipe.instructions,
-        dateCreated: new Date()
+        dateCreated: new Date(),
+        lastAccessed: new Date()
       });
+
   
       toast.success("Recipe saved to your account!");
     } catch (err) {
       console.error("Error saving recipe:", err);
       toast.error("Failed to save recipe.");
     }
-  };  
+  }; 
+  
+  const handleRemoveRecipe = async (recipeId) => {
+    if (!user || !recipeId) return;
+  
+    try {
+      const recipeRef = doc(db, "users", user.uid, "recipes", recipeId);
+      await deleteDoc(recipeRef);
+      setPastRecipes(prev => prev.filter(recipe => recipe.id !== recipeId));
+    } catch (error) {
+      console.error("Error removing recipe:", error);
+      alert("Failed to remove the recipe.");
+    }
+  };
   
 
   const handleLogout = async () => {
@@ -112,7 +173,46 @@ const NutrifyAI = () => {
     }
   };
 
+  const handleResendVerification = async () => {
+    try {
+      if (auth.currentUser) {
+        await sendEmailVerification(auth.currentUser);
+        toast.success("Check your inbox for the verification email!");
+      } else {
+        toast.error("No user is currently signed in.");
+      }
+    } catch (err) {
+      toast.error(`Failed to send verification: ${err.message}`);
+      console.error("Verification error:", err);
+    }
+  };
 
+  const handlePasswordReset = async () => {
+    if (!resetEmail) {
+      toast.error("Please enter an email.");
+      return;
+    }
+  
+    try {
+      await sendPasswordResetEmail(auth, resetEmail);
+      toast.success("Password reset email sent! Check your inbox.");
+      setIsResetModalOpen(false);
+      setResetEmail('');
+    } catch (err) {
+      console.error("Reset failed:", err);
+      if (err.code === "auth/user-not-found") {
+        toast.error("No account found with this email.");
+      } else if (err.code === "auth/invalid-email") {
+        toast.error("Invalid email format.");
+      } else {
+        toast.error("Something went wrong. Please try again.");
+      }
+    }
+  };
+  
+  
+  
+  
 
   const getStoreLink = (ingredientName) => {
     const query = encodeURIComponent(ingredientName);
@@ -138,6 +238,21 @@ const NutrifyAI = () => {
       console.log("User authenticated successfully via callback.");
     }
   }, []);
+  
+    // Refresh the user's email verification status
+  useEffect(() => {
+    const refreshUser = async () => {
+      if (auth.currentUser) {
+        await auth.currentUser.reload();
+      }
+    };
+    const interval = setInterval(() => {
+      refreshUser();
+    }, 5000); // check every 5 seconds
+
+    return () => clearInterval(interval);
+  }, []);
+
 
   // Sample recipe data as fallback
   const sampleRecipe = {
@@ -164,20 +279,32 @@ const NutrifyAI = () => {
   const API_URL = 'http://127.0.0.1:5000';
   // NEW Function to fetch past recipes
   const fetchPastRecipes = async () => {
-    if (!user) return;
+    if (!user) {
+      console.warn("User is not defined yet.");
+      return;
+    }
   
+    console.log("Fetching recipes for:", user.uid);
     setPastRecipesLoading(true);
+  
     try {
       const queryRef = collection(db, "users", user.uid, "recipes");
   
       let snapshot;
       try {
         snapshot = await getDocsFromCache(queryRef);
+        console.log("Got snapshot from cache");
         if (snapshot.empty) {
+          console.log("Cache was empty, trying server...");
           snapshot = await getDocs(queryRef);
         }
-      } catch {
+      } catch (cacheError) {
+        console.warn("Cache failed, fetching from server...", cacheError);
         snapshot = await getDocs(queryRef);
+      }
+  
+      if (snapshot.empty) {
+        console.warn("No recipes found.");
       }
   
       const recipeMap = new Map();
@@ -197,25 +324,47 @@ const NutrifyAI = () => {
         }
       });
   
-      const uniqueRecipes = Array.from(recipeMap.values());
-  
+      const uniqueRecipes = Array.from(recipeMap.values())
+        .sort((a, b) => {
+          const aTime = new Date(a.lastAccessed || a.dateCreated).getTime();
+          const bTime = new Date(b.lastAccessed || b.dateCreated).getTime();
+          return bTime - aTime; // most recent first
+        });
+
+
+      
+
+      console.log("Fetched unique recipes:", uniqueRecipes);
+
       setPastRecipes(uniqueRecipes);
+
     } catch (err) {
-      console.error("Error fetching recipes:", err);
+      console.error("🔥 Error fetching recipes:", err);
       setPastRecipes([]);
     } finally {
       setPastRecipesLoading(false);
+      console.log("Finished loading recipes");
     }
   };
   
   
   
+  
   // Fetch past recipes when visiting the Past Recipes view
   useEffect(() => {
-    if (currentView === 'pastRecipes') {
+    if (currentView === 'pastRecipes' && user) {
       fetchPastRecipes();
     }
-  }, [currentView]);
+  }, [currentView, user]);
+  
+
+  useEffect(() => {
+    if (user && pastRecipes.length === 0) {
+      fetchPastRecipes();
+    }
+  }, [user]);
+  
+  
   
   // Function to fetch recipe from our Python backend
   const fetchRecipeFromAPI = async (description) => {
@@ -439,42 +588,60 @@ const NutrifyAI = () => {
   
   // Handle ordering with Kroger
   const handleOrderWithKroger = async () => {
+    if (!krogerSignInAuthed) {
+      toast.error("🔐 Please log in to your Kroger account before ordering.");
+      return;
+    }
+  
     const confirmedIngredients = currentRecipe.ingredients
       .filter(ing => ing.confirmed && !ing.inPantry)
       .map(ing => ing.name);
-
+  
     if (confirmedIngredients.length === 0) {
-      alert("Please confirm at least one ingredient to order");
+      toast.error("✅ Please confirm at least one ingredient to order.");
       return;
     }
-
+  
     setLoading(true);
     setCartStatus('adding'); // Show "adding" overlay
-
+  
     try {
       const result = await addItemsToCart(confirmedIngredients, 'kroger');
-
+  
       if (result.success) {
-        setCartStatus('success'); // Show success overlay & "Go to Cart" button
+        setCartStatus('success');
       } else {
-        setCartStatus('error');   // Show error overlay
+        setCartStatus('error');
       }
     } catch (error) {
-      setCartStatus('error');     // Show error overlay
+      setCartStatus('error');
     } finally {
       setLoading(false);
     }
   };
+  
 
   // Helper function to format date
-  const formatDate = (dateString) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', { 
-      year: 'numeric', 
-      month: 'short', 
-      day: 'numeric' 
+  const formatDate = (dateValue) => {
+    let date;
+  
+    if (dateValue?.toDate) {
+      // Firestore Timestamp object
+      date = dateValue.toDate();
+    } else if (typeof dateValue === 'string' || typeof dateValue === 'number') {
+      // ISO string or timestamp number
+      date = new Date(dateValue);
+    } else {
+      return 'Unknown date';
+    }
+  
+    return date.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
     });
   };
+  
 
   // Helper function to create a short description from the recipe
   const createRecipeDescription = (recipe) => {
@@ -487,12 +654,17 @@ const NutrifyAI = () => {
       {/* ---------- SIDEBAR ---------- */}
       <div className="sidebar">
         <div className="sidebar-header">
-          <div className="logo-container">
-            <MessageCircle size={16} />
+          <div className="logo-container glow-outline">
+            <img
+              src="/grubify-logo.png"
+              alt="Grubify Logo"
+              style={{ width: "60px", height: "60px" }}
+            />
           </div>
           <span className="logo-text glow-outline">Grubify</span>
           <ChevronDown className="dropdown-icon" size={16} />
         </div>
+
         
         {/* Navigation menu */}
         <div className="nav-menu">
@@ -524,7 +696,17 @@ const NutrifyAI = () => {
           {user ? (
             <>
               <div className="user-email">👋 Welcome back, <strong>{user.displayName || user.email}</strong></div>
-              <button className="auth-button" onClick={handleLogout}>Log Out</button>
+
+              {!user.emailVerified && (
+                <button
+                  className="auth-button"
+                  style={{ backgroundColor: '#444', color: '#fff' }}
+                  onClick={handleResendVerification}
+                >
+                  Resend Verification Email
+                </button>
+              )}
+
             </>
           ) : (
             <button className="auth-button" onClick={() => setIsModalOpen(true)}>
@@ -532,6 +714,14 @@ const NutrifyAI = () => {
             </button>
           )}
         </div>
+        {user && (
+          <div className="logout-container" style={{ marginTop: "auto", padding: "20px" }}>
+            <button className="logout-button" onClick={handleLogout}>
+              Log Out
+            </button>
+          </div>
+        )}
+
 
 
       </div>
@@ -545,33 +735,52 @@ const NutrifyAI = () => {
           <div className="chat-area">
             <h1 className="main-heading">What would you like to cook today?</h1>
             <div className="center-query-container">
-              <div className="center-input-wrapper">
-                <input
-                  type="text"
-                  value={inputValue}
-                  onChange={(e) => setInputValue(e.target.value)}
-                  placeholder="Enter a recipe or dish you want to make..."
-                  className="center-text-input"
-                  disabled={loading}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !loading) handleSubmitRecipe();
-                  }}
-                />
-                <div className="center-input-buttons">
-                  <button
-                    className="icon-button"
-                    onClick={handleSubmitRecipe}
+            <div className="center-input-wrapper">
+              <div className="center-input-container">
+                <div className="autocomplete-wrapper" style={{ position: "relative", width: "100%" }}>
+                  <input
+                    type="text"
+                    value={inputValue}
+                    onChange={(e) => setInputValue(e.target.value)}
+                    placeholder="Enter whatever you want to eat with any personalizations you want. Get Creative!"
+                    className="center-text-input"
                     disabled={loading}
-                  >
-                    {loading ? (
-                      <div className="loading-spinner"></div>
-                    ) : (
-                      <Search size={18} />
-                    )}
-                  </button>
-                  {/* Removed microphone button */}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !loading) handleSubmitRecipe();
+                    }}
+                  />
+                  {filteredSuggestions.length > 0 && (
+                    <ul className="autocomplete-list">
+                      {filteredSuggestions.map((suggestion, index) => (
+                        <li
+                          key={index}
+                          className="autocomplete-item"
+                          onClick={() => {
+                            setInputValue(suggestion);
+                            setFilteredSuggestions([]);
+                          }}
+                        >
+                          {suggestion}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </div>
+
+                <button
+                  className="icon-button"
+                  onClick={handleSubmitRecipe}
+                  disabled={loading}
+                >
+                  {loading ? (
+                    <div className="loading-spinner"></div>
+                  ) : (
+                    <Search size={18} />
+                  )}
+                </button>
               </div>
+            </div>
+
               
               {/* Loading message */}
               {loading && (
@@ -613,12 +822,6 @@ const NutrifyAI = () => {
             <div className="store-toggle">
             <span className="toggle-label">
               Where do you want to shop?
-              <div className="tooltip-wrapper">
-                <span className="info-icon">ℹ️</span>
-                <div className="tooltip-text">
-                  If you choose Safeway, click the logo next to each ingredient to shop for it.
-                </div>
-              </div>
             </span>
 
 
@@ -644,7 +847,7 @@ const NutrifyAI = () => {
 
               {store === 'kroger' && (
                 <p className="store-helper-text">
-                  ✅ Select ingredients by clicking the green check mark next to each one you want us to add to your cart.<br />
+                  🛒 Just deselect any ingredients you already have at home by clicking the <strong>✔️ </strong>, and we'll add everything you need to your Kroger cart for you!<br />
                   🔐 Make sure you’re signed in to Kroger first.<br />
                   🛒 Then press <strong>Order with Kroger</strong> to build your cart.
                 </p>
@@ -725,15 +928,51 @@ const NutrifyAI = () => {
               </div>
               
               <div className="instructions-section">
-                <h2>Instructions</h2>
-                <ol className="instructions-list">
-                  {currentRecipe.instructions.map((step, index) => (
-                    <li key={index} className="instruction-step">
-                      {step}
-                    </li>
-                  ))}
-                </ol>
-                
+                <div className="instructions-dropdown">
+                  <button
+                    className="instructions-toggle"
+                    onClick={() => setInstructionsOpen(!instructionsOpen)}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "8px",
+                      padding: "10px 16px",
+                      backgroundColor: "#1e1e1e",
+                      color: "white",
+                      border: "1px solid #4caf50",
+                      borderRadius: "8px",
+                      cursor: "pointer",
+                      fontSize: "16px",
+                      fontWeight: "600",
+                      marginBottom: "10px"
+                    }}
+                  >
+                    <span>Instructions</span>
+                    <span
+                      className={`toggle-icon ${instructionsOpen ? 'rotate' : ''}`}
+                      style={{
+                        color: "black",
+                        backgroundColor: "#4caf50",
+                        padding: "2px 6px",
+                        borderRadius: "4px",
+                        fontWeight: "bold",
+                        boxShadow: "0 0 8px #4caf50, 0 0 12px #4caf50"
+                      }}
+                    >
+                      ▲
+                    </span>
+
+                  </button>
+
+                  <ol className={`instructions-list ${instructionsOpen ? 'open' : ''}`}>
+                    {currentRecipe.instructions.map((step, index) => (
+                      <li key={index} className="instruction-step">
+                        {step}
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+
                 <button 
                   className="save-recipe-button"
                   onClick={handleSaveRecipe}
@@ -743,6 +982,8 @@ const NutrifyAI = () => {
                   <span>Save to My Recipes</span>
                 </button>
               </div>
+
+
             </div>
           </div>
         )}
@@ -791,8 +1032,7 @@ const NutrifyAI = () => {
                     <div className="recipe-card-actions">
                       <button
                         className="card-action-button"
-                        onClick={() => {
-                          // Make sure all ingredients have the confirmed property
+                        onClick={async () => {
                           const preparedRecipe = {
                             ...recipe,
                             ingredients: recipe.ingredients.map(ingredient => ({
@@ -800,30 +1040,31 @@ const NutrifyAI = () => {
                               confirmed: false
                             }))
                           };
+                        
+                          // Update lastAccessed timestamp in Firestore
+                          try {
+                            const recipeRef = doc(db, "users", user.uid, "recipes", recipe.id);
+                            await updateDoc(recipeRef, {
+                              lastAccessed: new Date()
+                            });
+                          } catch (error) {
+                            console.error("Failed to update lastAccessed:", error);
+                          }
+                        
                           setCurrentRecipe(preparedRecipe);
-                          setCurrentView('details');
+                          setCurrentView("details");
                         }}
+                        
                       >
                         View Recipe
                       </button>
                       <button
                         className="card-action-button"
-                        onClick={() => {
-                          // Make sure all ingredients have the confirmed property, and
-                          // auto-confirm items not in pantry
-                          const preparedRecipe = {
-                            ...recipe,
-                            ingredients: recipe.ingredients.map(ingredient => ({
-                              ...ingredient,
-                              confirmed: !ingredient.inPantry
-                            }))
-                          };
-                          setCurrentRecipe(preparedRecipe);
-                          setCurrentView('details');
-                        }}
+                        onClick={() => handleRemoveRecipe(recipe.id)}
                       >
-                        Reorder
+                        Remove
                       </button>
+
                     </div>
                   </div>
                 ))}
@@ -933,6 +1174,13 @@ const NutrifyAI = () => {
           />
           <button className="auth-button primary" onClick={handleEmailLogin}>Log In</button>
           <button className="auth-button secondary" onClick={handleEmailSignup}>Sign Up</button>
+          <p
+            className="forgot-password-text"
+            onClick={() => setIsResetModalOpen(true)}
+          >
+            Forgot Password?
+          </p>
+
           <div className="auth-divider">or</div>
           <button className="auth-button google" onClick={handleGoogleLogin}>
             <span className="google-icon" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -957,6 +1205,35 @@ const NutrifyAI = () => {
           </button>
         </div>
       </Modal>
+      <Modal
+        isOpen={isResetModalOpen}
+        onRequestClose={() => setIsResetModalOpen(false)}
+        contentLabel="Reset Password Modal"
+        className="login-modal"
+        overlayClassName="login-overlay"
+      >
+        <div className="auth-card">
+          <h3 className="auth-title">Reset Your Password</h3>
+          <input
+            type="email"
+            placeholder="Enter your email"
+            value={resetEmail}
+            onChange={(e) => setResetEmail(e.target.value)}
+            className="auth-input"
+          />
+          <button className="auth-button primary" onClick={handlePasswordReset}>
+            Send Reset Email
+          </button>
+          <button
+            className="auth-button secondary"
+            onClick={() => setIsResetModalOpen(false)}
+            style={{ marginTop: "10px" }}
+          >
+            Cancel
+          </button>
+        </div>
+      </Modal>
+
 
       
     </div>
