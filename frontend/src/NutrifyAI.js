@@ -88,6 +88,20 @@ const NutrifyAI = () => {
   }, [user, isModalOpen]);
   
 
+  const getKrogerToken = async () => {
+    try {
+      const res = await fetch("https://us-central1-grubify-9cf13.cloudfunctions.net/krogerAuthToken", {
+        method: "POST",
+      });
+      const data = await res.json();
+      console.log("Kroger token:", data.accessToken);
+      return data.accessToken;
+    } catch (err) {
+      console.error("Failed to fetch Kroger token:", err);
+      return null;
+    }
+  };
+  
   const handleGoogleLogin = async () => {
     try {
       await signInWithPopup(auth, provider);
@@ -274,9 +288,7 @@ const NutrifyAI = () => {
       "Toss gently to combine and serve."
     ]
   };
-  
-  // The base URL for the API
-  const API_URL = 'http://127.0.0.1:5000';
+
   // NEW Function to fetch past recipes
   const fetchPastRecipes = async () => {
     if (!user) {
@@ -369,21 +381,19 @@ const NutrifyAI = () => {
   // Function to fetch recipe from our Python backend
   const fetchRecipeFromAPI = async (description) => {
     try {
-      const response = await fetch(`${API_URL}/generate-recipe`, {
+      const response = await fetch('https://generaterecipe-eyg4dno7ja-uc.a.run.app', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ description }),
       });
-      
+  
       if (!response.ok) {
         throw new Error('Failed to fetch recipe');
       }
-      
+  
       const data = await response.json();
-      
-      // The API now returns both raw text and structured recipe
       return data.structured_recipe;
     } catch (error) {
       console.error('Error fetching recipe:', error);
@@ -391,10 +401,14 @@ const NutrifyAI = () => {
     }
   };
   
+  
+  
+  
+  
   // Function to modify existing recipe through the API
   const modifyRecipeFromAPI = async (originalRecipe, modifications) => {
     try {
-      const response = await fetch(`${API_URL}/modify-recipe`, {
+      const response = await fetch('https://generaterecipe-eyg4dno7ja-uc.a.run.app/modify-recipe', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -420,7 +434,7 @@ const NutrifyAI = () => {
   // Function to fetch prices for ingredients
   const fetchIngredientPrices = async (ingredients, store = 'kroger') => {
     try {
-      const response = await fetch(`${API_URL}/fetch-prices`, {
+      const response = await fetch('https://generaterecipe-eyg4dno7ja-uc.a.run.app/fetch-prices', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -443,27 +457,23 @@ const NutrifyAI = () => {
   };
   
   // Function to add items to cart
-  const addItemsToCart = async (items, store = 'kroger') => {
+  const addItemsToCart = async (items) => {
     try {
-      const response = await fetch(`${API_URL}/add-to-cart`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ items, store }),
-        credentials: 'include',
+      const res = await fetch("https://us-central1-grubify-9cf13.cloudfunctions.net/addToKrogerCart", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ items }),
       });
-      
-      if (!response.ok) {
-        throw new Error('click the login with kroger button to authenticate');
-      }
-      
-      return await response.json();
-    } catch (error) {
-      console.error('Error adding to cart:', error);
-      return { success: false, error: error.message };
+  
+      const data = await res.json();
+      console.log("📦 Kroger add-to-cart result:", data);
+      return data;
+    } catch (err) {
+      console.error("🚨 Failed to add items to Kroger:", err);
+      return { success: false };
     }
   };
+  
   
   
   // Handle recipe submission with API call
@@ -683,7 +693,7 @@ const NutrifyAI = () => {
         <div className="nav-item-container" style={{ padding: "15px 20px", marginBottom: "20px" }}>
         <button
             className="upgrade-button"
-            onClick={() => window.open("http://127.0.0.1:5000/login", "_blank")}
+            onClick={() => window.open("https://api.grubify.ai/login", "_blank")}
             style={{
               backgroundColor: krogerSignInAuthed ? "green" : "",
               color: krogerSignInAuthed ? "white" : "",
@@ -967,8 +977,8 @@ const NutrifyAI = () => {
                   <ol className={`instructions-list ${instructionsOpen ? 'open' : ''}`}>
                     {currentRecipe.instructions.map((step, index) => (
                       <li key={index} className="instruction-step">
-                        {step}
-                      </li>
+                        <strong>Step {index + 1}:</strong> {step}
+                      </li>                    
                     ))}
                   </ol>
                 </div>
