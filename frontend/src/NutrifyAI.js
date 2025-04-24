@@ -693,7 +693,7 @@ const NutrifyAI = () => {
         <div className="nav-item-container" style={{ padding: "15px 20px", marginBottom: "20px" }}>
         <button
             className="upgrade-button"
-            onClick={() => window.open("https://api.grubify.ai/login", "_blank")}
+            onClick={() => window.open("https://grubify.onrender.com/login", "_blank")}
             style={{
               backgroundColor: krogerSignInAuthed ? "green" : "",
               color: krogerSignInAuthed ? "white" : "",

@@ -163,8 +163,8 @@ def fetch_ingredient_prices(ingredients, store="kroger"):
     from dotenv import load_dotenv
     load_dotenv()  # Ensure KROGER_CLIENT_ID, KROGER_CLIENT_SECRET are in .env
 
-    client_id = "nutrify-2432612430342445574c6e2f4174746941377459497376313952524f754958446f585241614a675677526d5646354f547a71502f4631365747572e4b1774410088019709705"
-    client_secret = "QkJnE0XrFDHIl1Y2BH9H1lFp96BYHU24fFfA2ZTL"
+    client_id = os.getenv("CLIENT_ID")
+    client_secret = os.getenv("CLIENT_SECRET")
 
     if not client_id or not client_secret:
         return {"error": "Kroger credentials not found in environment variables."}
@@ -208,8 +208,6 @@ def fetch_ingredient_prices(ingredients, store="kroger"):
 
 # Example usage:
 if __name__ == "__main__":
-    #CLIENT_ID = "nutrify-2432612430342445574c6e2f4174746941377459497376313952524f754958446f585241614a675677526d5646354f547a71502f4631365747572e4b1774410088019709705"
-    #CLIENT_SECRET = "QkJnE0XrFDHIl1Y2BH9H1lFp96BYHU24fFfA2ZTL"
     
     kroger_api = KrogerAPI(CLIENT_ID, CLIENT_SECRET)
     access_token = kroger_api.request_token()

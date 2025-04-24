@@ -22,7 +22,7 @@ app.config['SESSION_COOKIE_SAMESITE'] = 'None'
 app.config['SESSION_COOKIE_SECURE'] = True  # Ensure cookies are only sent over HTTPS
 
 # Kroger API constants
-CLIENT_ID = "nutrifai-243261243034242e644175722e4a4c397a4e507a454732506e594e366576617532756c356b4741754c48746c31634a59564b784d4f2e364e7743462e3423701595089688646"
+CLIENT_ID = os.getenv("CLIENT_ID")
 REDIRECT_URI = "https://grubify.onrender.com/callback"
 AUTH_URL = "https://api.kroger.com/v1/connect/oauth2/authorize"  # Add this line
 
@@ -114,8 +114,8 @@ def add_to_cart_route():
 
     # Create a Kroger API instance for product lookup
     from store_handler import KrogerAPI
-    client_id = "nutrifai-243261243034242e644175722e4a4c397a4e507a454732506e594e366576617532756c356b4741754c48746c31634a59564b784d4f2e364e7743462e3423701595089688646"
-    client_secret = "f8IG7k0gYTJZNfHM9a22vaP0_ytGIYng2Acr9mIu"
+    client_id = os.getenv("CLIENT_ID")
+    client_secret = os.getenv("CLIENT_SECRET")
     kroger_api = KrogerAPI(client_id, client_secret)
     
     # Get access token for product search
