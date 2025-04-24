@@ -23,7 +23,7 @@ app.config['SESSION_COOKIE_SECURE'] = True  # Ensure cookies are only sent over 
 
 # Kroger API constants
 CLIENT_ID = "nutrifai-243261243034242e644175722e4a4c397a4e507a454732506e594e366576617532756c356b4741754c48746c31634a59564b784d4f2e364e7743462e3423701595089688646"
-REDIRECT_URI = "https://grubify.ai/callback"
+REDIRECT_URI = "https://grubify.onrender.com/callback"
 AUTH_URL = "https://api.kroger.com/v1/connect/oauth2/authorize"  # Add this line
 
 @app.route("/test", methods=["GET", "POST"])
@@ -183,6 +183,7 @@ def callback():
 
     # Redirect back to the React app with a success query parameter
     return redirect("https://grubify.ai/?authSuccess=true")
+
 
     return """
     <h2>Successfully logged into Kroger!</h2>
