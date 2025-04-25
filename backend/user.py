@@ -10,7 +10,7 @@ from flask import Flask, request, redirect
 #CLIENT_SECRET = "f8IG7k0gYTJZNfHM9a22vaP0_ytGIYng2Acr9mIu"
 CLIENT_ID = os.getenv("KROGER_CLIENT_ID")
 CLIENT_SECRET = os.getenv("KROGER_CLIENT_SECRET")
-REDIRECT_URI = "http://127.0.0.1:5000/callback"
+REDIRECT_URI = "https://grubify.onrender.com/callback"
 
 # Kroger's PRODUCTION endpoints (use api.kroger.com):
 AUTH_URL = "https://api.kroger.com/v1/connect/oauth2/authorize"
