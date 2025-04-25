@@ -129,19 +129,28 @@ def add_to_cart_route():
         return jsonify({"success": False, "error": "No Kroger stores found"}), 500
     
     store_id = stores[0]["id"]
-    ingredients_str = ",".join(ingredients)
-    products = kroger_api.search_products(ingredients_str, location_id=store_id)
-    
-    # Add items to cart using UPCs
     success_list = []
-    for ingredient, details in products.items():
-        upc = details.get("UPC")
+
+    for ingredient in ingredients:
+        print(f"Searching for: {ingredient}")
+        products = kroger_api.search_products(ingredient, location_id=store_id)
+        
+        if not products:
+            print(f"No products found for {ingredient}")
+            success_list.append(False)
+            continue
+        
+        # Pick the first matching product
+        first_product = list(products.values())[0]  # take the first result
+        upc = first_product.get("UPC")
+        
         if upc:
             success = add_item_to_cart(user_token, upc, quantity=1, modality="PICKUP")
             success_list.append(success)
         else:
             print(f"No UPC found for {ingredient}")
             success_list.append(False)
+
 
     if all(success_list) and success_list:
         return jsonify({"success": True, "message": f"Added {len(success_list)} items to Kroger cart"})
@@ -184,11 +193,6 @@ def callback():
     # Redirect back to the React app with a success query parameter
     return redirect("https://grubify.ai/?authSuccess=true")
 
-
-    return """
-    <h2>Successfully logged into Kroger!</h2>
-    <p>You can now return to the React UI and click "Order with Kroger".</p>
-    """
 
 if __name__ == "__main__":
     app.run(debug=True, port=5000)
