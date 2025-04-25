@@ -114,8 +114,8 @@ def add_to_cart_route():
 
     # Create a Kroger API instance for product lookup
     from store_handler import KrogerAPI
-    CLIENT_ID = os.environ["KROGER_CLIENT_ID"]
-    CLIENT_SECRET = os.environ["KROGER_CLIENT_SECRET"]
+    client_id = os.environ["KROGER_CLIENT_ID"]
+    client_secret = os.environ["KROGER_CLIENT_SECRET"]
     kroger_api = KrogerAPI(client_id, client_secret)
     
     # Get access token for product search
