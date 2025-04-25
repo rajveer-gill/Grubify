@@ -132,16 +132,23 @@ def add_to_cart_route():
     success_list = []
 
     for ingredient in ingredients:
-        print(f"Searching for: {ingredient}")
+        print(f"📦 Searching for: {ingredient}")
         products = kroger_api.search_products(ingredient, location_id=store_id)
-        
+
+        if not products:
+            print(f"⚠️ No products found for {ingredient}")
+            missing_items.append(ingredient)
+            success_list.append(False)
+            continue
+
         if not products:
             print(f"No products found for {ingredient}")
             success_list.append(False)
             continue
         
         # Pick the first matching product
-        first_product = list(products.values())[0]  # take the first result
+        first_product = min(products.values(), key=lambda x: x.get("Price", float('inf')))
+          # take the first result
         upc = first_product.get("UPC")
         
         if upc:
