@@ -415,8 +415,8 @@ const NutrifyAI = () => {
         },
         body: JSON.stringify({
           original_recipe: originalRecipe,
-          modifications: modifications
-        }),
+          edit_instruction: modifications
+        }),        
       });
       
       if (!response.ok) {
@@ -424,7 +424,7 @@ const NutrifyAI = () => {
       }
       
       const data = await response.json();
-      return data.modified_recipe;
+      return data.updated_recipe;
     } catch (error) {
       console.error('Error modifying recipe:', error);
       throw error;

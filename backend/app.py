@@ -5,6 +5,7 @@ from store_handler import fetch_ingredient_prices
 from user import exchange_code_for_token, add_item_to_cart
 from dotenv import load_dotenv
 from data import Database
+import requests
 import os
 
 # Load environment variables
