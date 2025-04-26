@@ -13,6 +13,8 @@ load_dotenv()
 
 app = Flask(__name__)
 app.secret_key = "some-secret-key"  # Required for session management
+SPOONACULAR_API_KEY = os.environ.get('SPOONACULAR_API_KEY')
+
 
 # Enable CORS with credentials
 CORS(app, supports_credentials=True, origins=["https://grubify.ai"])
@@ -243,6 +245,76 @@ def refine_recipe():
     else:
         print("Error refining recipe:", response.text)
         return jsonify({"error": "Failed to refine recipe"}), 500
+
+@app.route('/calculate-nutrition', methods=['POST'])
+def calculate_nutrition():
+    try:
+        data = request.get_json()
+        ingredients = data.get('ingredients', [])
+
+        if not ingredients:
+            return jsonify({"error": "No ingredients provided"}), 400
+
+        total_calories = 0
+        total_protein = 0
+        total_carbs = 0
+        total_fat = 0
+
+        for item in ingredients:
+            ingredient_name = item.get('name')
+            amount = item.get('amount', '')
+
+            if not ingredient_name:
+                continue
+
+            # Search for ingredient nutrition
+            search_url = f"https://api.spoonacular.com/food/ingredients/search"
+            search_params = {
+                "query": ingredient_name,
+                "apiKey": SPOONACULAR_API_KEY
+            }
+            search_response = requests.get(search_url, params=search_params)
+            search_data = search_response.json()
+
+            if not search_data.get('results'):
+                continue  # No ingredient found
+
+            ingredient_id = search_data['results'][0]['id']
+
+            # Get detailed nutrition info
+            info_url = f"https://api.spoonacular.com/food/ingredients/{ingredient_id}/information"
+            info_params = {
+                "amount": 1,
+                "unit": "serving",
+                "apiKey": SPOONACULAR_API_KEY
+            }
+            info_response = requests.get(info_url, params=info_params)
+            info_data = info_response.json()
+
+            # Pull macros
+            nutrition = info_data.get('nutrition', {})
+            nutrients = nutrition.get('nutrients', [])
+
+            calories = next((n['amount'] for n in nutrients if n['name'] == 'Calories'), 0)
+            protein = next((n['amount'] for n in nutrients if n['name'] == 'Protein'), 0)
+            carbs = next((n['amount'] for n in nutrients if n['name'] == 'Carbohydrates'), 0)
+            fat = next((n['amount'] for n in nutrients if n['name'] == 'Fat'), 0)
+
+            total_calories += calories
+            total_protein += protein
+            total_carbs += carbs
+            total_fat += fat
+
+        return jsonify({
+            "calories": round(total_calories),
+            "protein": round(total_protein, 1),
+            "carbs": round(total_carbs, 1),
+            "fat": round(total_fat, 1)
+        })
+
+    except Exception as e:
+        print(f"🔥 Error calculating nutrition: {str(e)}")
+        return jsonify({"error": "Failed to calculate nutrition"}), 500
 
 
 
