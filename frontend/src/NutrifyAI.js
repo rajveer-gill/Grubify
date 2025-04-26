@@ -11,6 +11,7 @@ import {
   MessageCircle,
   Compass,
   ChevronDown,
+  ChevronUp,
   Info,
   User,
   ShoppingCart,
@@ -568,9 +569,7 @@ const NutrifyAI = () => {
       // Call the API to modify the recipe
       const modifiedRecipe = await modifyRecipeFromAPI(currentRecipe, chatInput);
       const parsedRecipe = JSON.parse(modifiedRecipe);
-
-      // Now parsedRecipe is an actual object
-
+  
       const updatedRecipe = {
         ...parsedRecipe,
         ingredients: parsedRecipe.ingredients.map(newIngredient => {
@@ -585,12 +584,18 @@ const NutrifyAI = () => {
           };
         })
       };
+  
+      // 🔥 ADD THIS: fetch nutrition for the updated recipe
+      const updatedNutrition = await fetchNutritionInfo(updatedRecipe.ingredients);
+      if (updatedNutrition) {
+        updatedRecipe.nutrition = updatedNutrition;
+      }
       
       // Add system response to chat history
       setChatHistory(prevHistory => [
         ...prevHistory,
         { 
-          text: `Recipe updated: "${modifiedRecipe.name}"`,
+          text: `Recipe updated!`,
           sender: 'system',
           timestamp: new Date().toISOString()
         }
@@ -600,7 +605,6 @@ const NutrifyAI = () => {
     } catch (error) {
       console.error("Error modifying recipe:", error);
       
-      // Add error message to chat history
       setChatHistory(prevHistory => [
         ...prevHistory,
         { 
@@ -614,6 +618,7 @@ const NutrifyAI = () => {
       setModificationLoading(false);
     }
   };
+  
   
   // Handle removing an ingredient (unused in final UI, but kept here if needed)
   const handleRemoveIngredient = (indexToRemove) => {
@@ -1030,16 +1035,41 @@ const NutrifyAI = () => {
                     <div className="dropdown-content">
                       {currentRecipe?.nutrition ? (
                         <>
-                          <p><strong>Calories:</strong> {currentRecipe.nutrition.calories} kcal</p>
-                          <p><strong>Protein:</strong> {currentRecipe.nutrition.protein} g</p>
-                          <p><strong>Carbs:</strong> {currentRecipe.nutrition.carbs} g</p>
-                          <p><strong>Fat:</strong> {currentRecipe.nutrition.fat} g</p>
+                          <div className="nutrition-item">
+                            <span><strong>Calories:</strong></span> 
+                            <span>{currentRecipe.nutrition.calories} kcal</span>
+                          </div>
+                          <div className="nutrition-item">
+                            <span><strong>Protein:</strong></span> 
+                            <span>{currentRecipe.nutrition.protein} g</span>
+                          </div>
+                          <div className="nutrition-item">
+                            <span><strong>Carbs:</strong></span> 
+                            <span>{currentRecipe.nutrition.carbs} g</span>
+                          </div>
+                          <div className="nutrition-item">
+                            <span><strong>Fat:</strong></span> 
+                            <span>{currentRecipe.nutrition.fat} g</span>
+                          </div>
+                          <div className="nutrition-item">
+                            <span><strong>Fiber:</strong></span> 
+                            <span>{currentRecipe.nutrition.fiber} g</span>
+                          </div>
+                          <div className="nutrition-item">
+                            <span><strong>Sugar:</strong></span> 
+                            <span>{currentRecipe.nutrition.sugar} g</span>
+                          </div>
+                          <div className="nutrition-item">
+                            <span><strong>Sodium:</strong></span> 
+                            <span>{currentRecipe.nutrition.sodium} mg</span>
+                          </div>
                         </>
                       ) : (
                         <p>Nutrition info not available.</p>
                       )}
                     </div>
                   )}
+
                 </div>
 
 

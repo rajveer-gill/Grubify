@@ -1625,6 +1625,21 @@ body {
   animation: spin 1s linear infinite;
 }
 
+/* 🍳 Nutrition Info Styling */
+.nutrition-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 0;
+  font-size: 16px;
+  color: #ccc;
+  border-bottom: 1px solid #333;
+}
+
+.nutrition-item:last-child {
+  border-bottom: none;
+}
+
+
 @keyframes spin {
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }

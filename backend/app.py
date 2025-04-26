@@ -299,6 +299,10 @@ def calculate_nutrition():
             protein = next((n['amount'] for n in nutrients if n['name'] == 'Protein'), 0)
             carbs = next((n['amount'] for n in nutrients if n['name'] == 'Carbohydrates'), 0)
             fat = next((n['amount'] for n in nutrients if n['name'] == 'Fat'), 0)
+            fiber = next((n['amount'] for n in nutrients if n['name'] == 'Fiber'), 0)
+            sugar = next((n['amount'] for n in nutrients if n['name'] == 'Sugar'), 0)
+            sodium = next((n['amount'] for n in nutrients if n['name'] == 'Sodium'), 0)
+
 
             total_calories += calories
             total_protein += protein
@@ -309,7 +313,10 @@ def calculate_nutrition():
             "calories": round(total_calories),
             "protein": round(total_protein, 1),
             "carbs": round(total_carbs, 1),
-            "fat": round(total_fat, 1)
+            "fat": round(total_fat, 1),
+            "fiber": round(total_fiber, 1),
+            "sugar": round(total_sugar, 1),
+            "sodium": round(total_sodium)
         })
 
     except Exception as e:
