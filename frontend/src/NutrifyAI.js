@@ -51,6 +51,8 @@ const NutrifyAI = () => {
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
   const [resetEmail, setResetEmail] = useState('');
   const [filteredSuggestions, setFilteredSuggestions] = useState([]);
+  const [showNutrition, setShowNutrition] = useState(false);
+
   
 
   useEffect(() => {
@@ -223,6 +225,29 @@ const NutrifyAI = () => {
       }
     }
   };
+
+  const fetchNutritionInfo = async (ingredients) => {
+    try {
+      const response = await fetch('https://grubify.onrender.com/calculate-nutrition', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ ingredients })
+      });
+  
+      if (!response.ok) {
+        throw new Error('Failed to fetch nutrition info');
+      }
+  
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('Error fetching nutrition info:', error);
+      return null;
+    }
+  };
+  
   
   
   
@@ -496,8 +521,15 @@ const NutrifyAI = () => {
         })),
       };
       
+      const nutritionData = await fetchNutritionInfo(recipeWithPantry.ingredients);
+
+      if (nutritionData) {
+        recipeWithPantry.nutrition = nutritionData;
+      }
+
       setCurrentRecipe(recipeWithPantry);
       setCurrentView('details');
+
     } catch (error) {
       console.error("Error getting recipe:", error);
       setError("Failed to fetch recipe. Using sample recipe instead.");
@@ -983,6 +1015,33 @@ const NutrifyAI = () => {
                     ))}
                   </ol>
                 </div>
+
+                {/*Nutrition Info Dropdown */}
+                <div className="dropdown">
+                  <div
+                    className="dropdown-header"
+                    onClick={() => setShowNutrition(!showNutrition)}
+                  >
+                    <span>Nutrition Info</span>
+                    {showNutrition ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                  </div>
+
+                  {showNutrition && (
+                    <div className="dropdown-content">
+                      {currentRecipe?.nutrition ? (
+                        <>
+                          <p><strong>Calories:</strong> {currentRecipe.nutrition.calories} kcal</p>
+                          <p><strong>Protein:</strong> {currentRecipe.nutrition.protein} g</p>
+                          <p><strong>Carbs:</strong> {currentRecipe.nutrition.carbs} g</p>
+                          <p><strong>Fat:</strong> {currentRecipe.nutrition.fat} g</p>
+                        </>
+                      ) : (
+                        <p>Nutrition info not available.</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+
 
                 <button 
                   className="save-recipe-button"
