@@ -259,6 +259,9 @@ def calculate_nutrition():
         total_protein = 0
         total_carbs = 0
         total_fat = 0
+        total_fiber = 0
+        total_sugar = 0
+        total_sodium = 0
 
         for item in ingredients:
             ingredient_name = item.get('name')
