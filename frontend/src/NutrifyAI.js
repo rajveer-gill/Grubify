@@ -991,6 +991,42 @@ const NutrifyAI = () => {
                   <Save size={16} />
                   <span>Save to My Recipes</span>
                 </button>
+                {/* Recipe Refinement Box */}
+                <div style={{ marginTop: "30px", padding: "20px", border: "1px solid #ccc", borderRadius: "10px", backgroundColor: "#f9f9f9" }}>
+                  <h3>Want to tweak your recipe?</h3>
+                  <input
+                    type="text"
+                    placeholder="e.g. make it spicier, remove nuts, add more garlic..."
+                    value={chatInput}
+                    onChange={(e) => setChatInput(e.target.value)}
+                    style={{
+                      width: "100%",
+                      padding: "10px",
+                      marginTop: "10px",
+                      marginBottom: "10px",
+                      borderRadius: "8px",
+                      border: "1px solid #ccc",
+                      fontSize: "16px"
+                    }}
+                  />
+                  <button
+                    onClick={handleRecipeModification}
+                    disabled={modificationLoading}
+                    style={{
+                      padding: "10px 20px",
+                      backgroundColor: "#4caf50",
+                      color: "white",
+                      border: "none",
+                      borderRadius: "8px",
+                      cursor: "pointer",
+                      fontWeight: "bold",
+                      fontSize: "16px"
+                    }}
+                  >
+                    {modificationLoading ? "Refining..." : "Refine Recipe"}
+                  </button>
+                </div>
+
               </div>
 
 
