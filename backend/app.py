@@ -308,6 +308,10 @@ def calculate_nutrition():
             total_protein += protein
             total_carbs += carbs
             total_fat += fat
+            total_fiber += fiber
+            total_sugar += sugar
+            total_sodium += sodium
+
 
         return jsonify({
             "calories": round(total_calories),
