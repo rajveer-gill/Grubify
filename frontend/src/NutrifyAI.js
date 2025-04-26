@@ -992,40 +992,49 @@ const NutrifyAI = () => {
                   <Save size={16} />
                   <span>Save to My Recipes</span>
                 </button>
-                {/* Recipe Refinement Box */}
-                <div style={{ marginTop: "30px", padding: "20px", border: "1px solid #ccc", borderRadius: "10px", backgroundColor: "#f9f9f9" }}>
-                  <h3>Want to tweak your recipe?</h3>
-                  <input
-                    type="text"
-                    placeholder="e.g. make it spicier, remove nuts, add more garlic..."
-                    value={chatInput}
-                    onChange={(e) => setChatInput(e.target.value)}
-                    style={{
-                      width: "100%",
-                      padding: "10px",
-                      marginTop: "10px",
-                      marginBottom: "10px",
-                      borderRadius: "8px",
-                      border: "1px solid #ccc",
-                      fontSize: "16px"
-                    }}
-                  />
-                  <button
-                    onClick={handleRecipeModification}
-                    disabled={modificationLoading}
-                    style={{
-                      padding: "10px 20px",
-                      backgroundColor: "#4caf50",
-                      color: "white",
-                      border: "none",
-                      borderRadius: "8px",
-                      cursor: "pointer",
-                      fontWeight: "bold",
-                      fontSize: "16px"
-                    }}
-                  >
-                    {modificationLoading ? "Refining..." : "Refine Recipe"}
-                  </button>
+                <div className="recipe-chat-container">
+                  <h3>Modify Your Recipe</h3>
+                  <div className="chat-help-text">
+                    Ask for tweaks like "make it spicier", "remove nuts", "add more garlic", etc.
+                  </div>
+
+                  {chatHistory.length > 0 && (
+                    <div className="chat-history">
+                      {chatHistory.map((msg, index) => (
+                        <div
+                          key={index}
+                          className={`chat-message ${msg.sender} ${msg.isError ? 'error' : ''}`}
+                        >
+                          {msg.text}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="chat-input-container">
+                    <input
+                      type="text"
+                      className="chat-input"
+                      placeholder="Type your recipe change..."
+                      value={chatInput}
+                      onChange={(e) => setChatInput(e.target.value)}
+                      disabled={modificationLoading}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !modificationLoading) handleRecipeModification();
+                      }}
+                    />
+                    <button
+                      className="chat-send-button"
+                      onClick={handleRecipeModification}
+                      disabled={modificationLoading}
+                    >
+                      {modificationLoading ? (
+                        <div className="chat-loading-spinner"></div>
+                      ) : (
+                        <Send size={16} />
+                      )}
+                    </button>
+                  </div>
                 </div>
 
               </div>
