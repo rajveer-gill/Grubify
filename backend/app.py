@@ -200,6 +200,50 @@ def callback():
     # Redirect back to the React app with a success query parameter
     return redirect("https://grubify.ai/?authSuccess=true")
 
+@app.route("/refine-recipe", methods=["POST"])
+def refine_recipe():
+    data = request.get_json()
+    original_recipe = data.get("original_recipe")
+    edit_instruction = data.get("edit_instruction")
+
+    if not original_recipe or not edit_instruction:
+        return jsonify({"error": "Missing original recipe or instruction"}), 400
+
+    openai_key = os.environ.get("OPENAI_API_KEY")
+    headers = {
+        "Authorization": f"Bearer {openai_key}",
+        "Content-Type": "application/json"
+    }
+
+    prompt = f"""You are an assistant that modifies recipes based on user requests.
+    Here is the original recipe:
+    {original_recipe}
+
+    Please modify it based on this user instruction:
+    {edit_instruction}
+
+    Return the result in structured JSON format with 'name', 'ingredients' (array), and 'instructions' (array)."""
+
+    response = requests.post(
+        "https://api.openai.com/v1/chat/completions",
+        headers=headers,
+        json={
+            "model": "gpt-3.5-turbo",
+            "messages": [
+                {"role": "system", "content": "You are a helpful AI recipe assistant."},
+                {"role": "user", "content": prompt}
+            ]
+        }
+    )
+
+    if response.status_code == 200:
+        new_recipe = response.json()["choices"][0]["message"]["content"]
+        return jsonify({"updated_recipe": new_recipe})
+    else:
+        print("Error refining recipe:", response.text)
+        return jsonify({"error": "Failed to refine recipe"}), 500
+
+
 
 if __name__ == "__main__":
     app.run(debug=True, port=5000)

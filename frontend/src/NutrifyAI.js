@@ -408,7 +408,7 @@ const NutrifyAI = () => {
   // Function to modify existing recipe through the API
   const modifyRecipeFromAPI = async (originalRecipe, modifications) => {
     try {
-      const response = await fetch('https://generaterecipe-eyg4dno7ja-uc.a.run.app/modify-recipe', {
+      const response = await fetch('https://grubify.onrender.com/refine-recipe', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
