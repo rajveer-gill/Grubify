@@ -535,12 +535,13 @@ const NutrifyAI = () => {
     try {
       // Call the API to modify the recipe
       const modifiedRecipe = await modifyRecipeFromAPI(currentRecipe, chatInput);
-      
-      // Keep pantry status and confirmation for ingredients that exist in both recipes
+      const parsedRecipe = JSON.parse(modifiedRecipe);
+
+      // Now parsedRecipe is an actual object
+
       const updatedRecipe = {
-        ...modifiedRecipe,
-        ingredients: modifiedRecipe.ingredients.map(newIngredient => {
-          // Try to find this ingredient in the current recipe
+        ...parsedRecipe,
+        ingredients: parsedRecipe.ingredients.map(newIngredient => {
           const existingIngredient = currentRecipe.ingredients.find(
             ing => ing.name.toLowerCase() === newIngredient.name.toLowerCase()
           );
