@@ -543,6 +543,7 @@ const NutrifyAI = () => {
     if (inputValue.trim() === '') return;
     
     setLoading(true);
+    setFilteredSuggestions([]);
     setError(null);
     
     try {

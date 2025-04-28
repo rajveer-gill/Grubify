@@ -1,5 +1,5 @@
 from flask import Flask, request, jsonify, redirect, session
-from flask_cors import CORS
+from flask_cors import CORS, cross_origin
 from recipe_handler import fetch_recipe
 from store_handler import fetch_ingredient_prices
 from user import exchange_code_for_token, add_item_to_cart
@@ -247,6 +247,7 @@ def refine_recipe():
         return jsonify({"error": "Failed to refine recipe"}), 500
 
 @app.route('/calculate-nutrition', methods=['POST'])
+@cross_origin(origin="https://grubify.ai", supports_credentials=True)
 def calculate_nutrition():
     try:
         data = request.get_json()
