@@ -17,7 +17,7 @@ SPOONACULAR_API_KEY = os.environ.get('SPOONACULAR_API_KEY')
 
 
 # Enable CORS with credentials
-CORS(app, supports_credentials=True, origins=["https://grubify.ai"])
+CORS(app, resources={r"/*": {"origins": "https://grubify.ai"}})
 
 
 # Configure session cookies for cross-origin requests

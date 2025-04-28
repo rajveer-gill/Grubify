@@ -53,7 +53,7 @@ const NutrifyAI = () => {
   const [resetEmail, setResetEmail] = useState('');
   const [filteredSuggestions, setFilteredSuggestions] = useState([]);
   const [showNutrition, setShowNutrition] = useState(false);
-
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   
 
   useEffect(() => {
@@ -136,14 +136,35 @@ const NutrifyAI = () => {
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
+      
+      toast.success('Account created successfully! Please check your email for verification.');
   
-      await user.sendEmailVerification();
-      toast.success('Account created! Please verify your email before continuing.');
-    } catch (err) {
-      toast.error('Signup failed.');
-      console.error(err);
+      setEmail('');
+      setPassword('');
+
+      try {
+        await sendEmailVerification(user);
+        toast.success('Verification email sent!');
+      } catch (verifyErr) {
+        console.error("Error sending verification email:", verifyErr);
+        toast.error('Failed to send verification email. You can resend it later.');
+      }
+  
+      setIsModalOpen(false); // close modal after signup
+    } catch (signupErr) {
+      console.error("Error during signup:", signupErr);
+      if (signupErr.code === 'auth/email-already-in-use') {
+        toast.error('Email already in use. Please log in instead.');
+      } else if (signupErr.code === 'auth/invalid-email') {
+        toast.error('Invalid email format.');
+      } else if (signupErr.code === 'auth/weak-password') {
+        toast.error('Password should be at least 6 characters.');
+      } else {
+        toast.error('Signup failed. Please try again.');
+      }
     }
   };
+  
 
   
 
@@ -189,6 +210,21 @@ const NutrifyAI = () => {
       console.error("Logout failed:", err);
     }
   };
+
+  const handleDeleteAccount = async () => {
+    if (window.confirm("Are you sure you want to delete your account? This action cannot be undone.")) {
+      try {
+        const user = auth.currentUser;
+        await user.delete();
+        toast.success("Account deleted successfully.");
+        window.location.reload(); // Optionally log them out/reload
+      } catch (error) {
+        console.error("Error deleting account:", error);
+        toast.error("Failed to delete account. You may need to re-login to confirm.");
+      }
+    }
+  };
+  
 
   const handleResendVerification = async () => {
     try {
@@ -533,17 +569,9 @@ const NutrifyAI = () => {
 
     } catch (error) {
       console.error("Error getting recipe:", error);
-      setError("Failed to fetch recipe. Using sample recipe instead.");
-      
-      // Fallback to sample recipe
-      setCurrentRecipe({
-        ...sampleRecipe,
-        ingredients: sampleRecipe.ingredients.map(ingredient => ({
-          ...ingredient,
-          confirmed: false
-        }))
-      });
-      setCurrentView('details');
+      toast.error("Sorry, no recipes could be generated. Please try describing your dish differently!");
+      setError(null);
+      setCurrentRecipe(null);
     } finally {
       setLoading(false);
     }
@@ -700,7 +728,7 @@ const NutrifyAI = () => {
   return (
     <div className="nutrify-container">
       {/* ---------- SIDEBAR ---------- */}
-      <div className="sidebar">
+      <div className={`sidebar ${sidebarOpen ? 'open' : 'closed'}`}>
         <div className="sidebar-header">
           <div className="logo-container glow-outline">
             <img
@@ -712,6 +740,7 @@ const NutrifyAI = () => {
           <span className="logo-text glow-outline">Grubify</span>
           <ChevronDown className="dropdown-icon" size={16} />
         </div>
+
 
         
         {/* Navigation menu */}
@@ -728,42 +757,60 @@ const NutrifyAI = () => {
         </div>
 
         {/* Login button */}
-        <div className="nav-item-container" style={{ padding: "15px 20px", marginBottom: "20px" }}>
-        <button
-            className="upgrade-button"
-            onClick={() => window.open("https://grubify.onrender.com/login", "_blank")}
-            style={{
-              backgroundColor: krogerSignInAuthed ? "green" : "",
-              color: krogerSignInAuthed ? "white" : "",
-            }}
-          >
-            <span>{krogerSignInAuthed ? "Logged in Kroger" : "Login with Kroger"}</span>
-          </button>
-        </div>
+        {sidebarOpen && (
+          <div className="nav-item-container" style={{ padding: "15px 20px", marginBottom: "20px" }}>
+            <button
+                className="upgrade-button"
+                onClick={() => window.open("https://grubify.onrender.com/login", "_blank")}
+                style={{
+                  backgroundColor: krogerSignInAuthed ? "green" : "",
+                  color: krogerSignInAuthed ? "white" : "",
+                }}
+              >
+              <span>{krogerSignInAuthed ? "Logged in Kroger" : "Login with Kroger"}</span>
+            </button>
+          </div>
+        )}
         <div className="sidebar-auth">
-          {user ? (
-            <>
-              <div className="user-email">👋 Welcome back, <strong>{user.displayName || user.email}</strong></div>
+          {user && sidebarOpen && (
+            <div className="user-email">
+              👋 Welcome back, <strong>{user.displayName || user.email}</strong>
+            </div>
+          )}
 
-              {!user.emailVerified && (
-                <button
-                  className="auth-button"
-                  style={{ backgroundColor: '#444', color: '#fff' }}
-                  onClick={handleResendVerification}
-                >
-                  Resend Verification Email
-                </button>
-              )}
+          <button
+            onClick={() => setSidebarOpen(!sidebarOpen)}
+            className="sidebar-toggle-button"
+          >
+            {sidebarOpen ? "←" : "→"}
+          </button>
 
-            </>
-          ) : (
-            <button className="auth-button" onClick={() => setIsModalOpen(true)}>
+          {user && sidebarOpen && !user.emailVerified && (
+            <button
+              className="auth-button"
+              style={{ backgroundColor: '#444', color: '#fff' }}
+              onClick={handleResendVerification}
+            >
+              Resend Verification Email
+            </button>
+          )}
+
+          {!user && sidebarOpen && (
+            <button
+              className="auth-button"
+              onClick={() => setIsModalOpen(true)}
+            >
               Sign In
             </button>
           )}
         </div>
+
         {user && (
           <div className="logout-container" style={{ marginTop: "auto", padding: "20px" }}>
+            <button onClick={handleDeleteAccount} className="profile-option delete-account-button">
+              Delete Account
+            </button>
+
             <button className="logout-button" onClick={handleLogout}>
               Log Out
             </button>
@@ -784,7 +831,7 @@ const NutrifyAI = () => {
             <h1 className="main-heading">What would you like to cook today?</h1>
             <div className="center-query-container">
             <div className="center-input-wrapper">
-              <div className="center-input-container">
+              <div className="center-input-container"> 
                 <div className="autocomplete-wrapper" style={{ position: "relative", width: "100%" }}>
                   <input
                     type="text"
@@ -1022,45 +1069,57 @@ const NutrifyAI = () => {
                 </div>
 
                 {/*Nutrition Info Dropdown */}
-                <div className="dropdown">
-                  <div
-                    className="dropdown-header"
+                <div className="nutrition-dropdown">
+                  <button
+                    className="nutrition-toggle"
                     onClick={() => setShowNutrition(!showNutrition)}
                   >
                     <span>Nutrition Info</span>
-                    {showNutrition ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                  </div>
+                    <span
+                      className={`toggle-icon ${showNutrition ? 'rotate' : ''}`}
+                      style={{
+                        color: "black",
+                        backgroundColor: "#4caf50",
+                        padding: "2px 6px",
+                        borderRadius: "4px",
+                        fontWeight: "bold",
+                        boxShadow: "0 0 8px #4caf50, 0 0 12px #4caf50"
+                      }}
+                    >
+                      ▲
+                    </span>
+                  </button>
 
                   {showNutrition && (
-                    <div className="dropdown-content">
+                    <div className="nutrition-content">
                       {currentRecipe?.nutrition ? (
                         <>
                           <div className="nutrition-item">
-                            <span><strong>Calories:</strong></span> 
+                            <span><strong>Calories:</strong></span>
                             <span>{currentRecipe.nutrition.calories} kcal</span>
                           </div>
                           <div className="nutrition-item">
-                            <span><strong>Protein:</strong></span> 
+                            <span><strong>Protein:</strong></span>
                             <span>{currentRecipe.nutrition.protein} g</span>
                           </div>
                           <div className="nutrition-item">
-                            <span><strong>Carbs:</strong></span> 
+                            <span><strong>Carbs:</strong></span>
                             <span>{currentRecipe.nutrition.carbs} g</span>
                           </div>
                           <div className="nutrition-item">
-                            <span><strong>Fat:</strong></span> 
+                            <span><strong>Fat:</strong></span>
                             <span>{currentRecipe.nutrition.fat} g</span>
                           </div>
                           <div className="nutrition-item">
-                            <span><strong>Fiber:</strong></span> 
+                            <span><strong>Fiber:</strong></span>
                             <span>{currentRecipe.nutrition.fiber} g</span>
                           </div>
                           <div className="nutrition-item">
-                            <span><strong>Sugar:</strong></span> 
+                            <span><strong>Sugar:</strong></span>
                             <span>{currentRecipe.nutrition.sugar} g</span>
                           </div>
                           <div className="nutrition-item">
-                            <span><strong>Sodium:</strong></span> 
+                            <span><strong>Sodium:</strong></span>
                             <span>{currentRecipe.nutrition.sodium} mg</span>
                           </div>
                         </>
@@ -1069,8 +1128,8 @@ const NutrifyAI = () => {
                       )}
                     </div>
                   )}
-
                 </div>
+
 
 
                 <button 

@@ -1625,19 +1625,125 @@ body {
   animation: spin 1s linear infinite;
 }
 
-.nutrition-item {
+.nutrition-dropdown {
+  margin-top: 1rem;
+}
+
+.nutrition-toggle {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 10px 12px;
-  font-size: 17px;
-  color: #ddd;
-  border-bottom: 1px solid #333;
+  background-color: #1f1f1f;
+  color: #90ee90;
+  padding: 0.75rem 1rem;
+  border: none;
+  border-radius: 8px;
+  font-size: 1.1rem;
+  width: 100%;
+  cursor: pointer;
+  font-weight: bold;
+  transition: background 0.2s;
+}
+
+.nutrition-toggle:hover {
+  background-color: #2c2c2c;
+}
+
+.nutrition-content {
+  margin-top: 10px;
+  padding: 15px;
+  background-color: rgba(255, 255, 255, 0.05);
+  border-radius: 10px;
+}
+
+.nutrition-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .nutrition-item:last-child {
   border-bottom: none;
 }
+
+.delete-account-button {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  color: #ff4d4d;
+  border: 2px solid #ff4d4d;
+  background-color: transparent;
+  padding: 10px 20px;
+  border-radius: 8px;
+  margin-bottom: 10px;
+  font-size: 16px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.delete-account-button:hover {
+  background-color: #ff4d4d;
+  color: white;
+}
+
+.error-alert {
+  background-color: rgba(255, 77, 77, 0.15);
+  color: #ff4d4d;
+  border: 1px solid #ff4d4d;
+  padding: 12px 16px;
+  border-radius: 8px;
+  margin-bottom: 12px;
+  font-weight: bold;
+  font-size: 16px;
+  text-align: center;
+  animation: fadeIn 0.4s ease-in-out;
+}
+
+.close-error-button {
+  background: none;
+  border: none;
+  color: #ff4d4d;
+  font-size: 20px;
+  font-weight: bold;
+  margin-left: 12px;
+  cursor: pointer;
+  outline: none;
+  transition: color 0.2s ease;
+}
+
+.close-error-button:hover {
+  color: white;
+}
+
+.generate-button[disabled] {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.loading-spinner {
+  width: 20px;
+  height: 20px;
+  border: 3px solid #4caf50;
+  border-top: 3px solid transparent;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin: auto;
+}
+
+
+
+
+
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+
+
 
 
 
@@ -1704,4 +1810,78 @@ body {
     transform: translateY(0);
   }
 }
+
+/* Sidebar open/close */
+.sidebar {
+  width: 250px;
+  transition: transform 0.3s ease-in-out;
+}
+
+.sidebar.open {
+  width: 250px;
+  transition: width 0.3s;
+}
+
+.sidebar.closed {
+  width: 70px;
+  transition: width 0.3s;
+}
+
+.sidebar-toggle {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0 10px;
+  margin-bottom: 10px;
+}
+
+.sidebar-toggle-button {
+  background-color: #333;
+  border: 2px solid #4caf50;
+  color: white;
+  font-size: 20px;
+  border-radius: 10px;
+  padding: 10px 14px;
+  margin-top: 10px;
+  cursor: pointer;
+  transition: background-color 0.3s, transform 0.3s;
+}
+
+.sidebar-toggle-button:hover {
+  background-color: #4caf50;
+  transform: scale(1.05);
+}
+
+
+.sidebar.closed .sidebar-header,
+.sidebar.closed .nav-item span,
+.sidebar.closed .sidebar-auth span,
+.sidebar.closed .delete-account-button,
+.sidebar.closed .logout-button {
+  display: none;
+}
+
+
+
+/* Hamburger Button */
+.hamburger-button {
+  position: fixed;
+  top: 15px;
+  left: 15px;
+  background: none;
+  border: 2px solid white;
+  color: white;
+  font-size: 24px;
+  border-radius: 6px;
+  padding: 8px;
+  z-index: 1000;
+  background-color: black;
+}
+
+/* Only show hamburger on mobile */
+@media (min-width: 769px) {
+  .hamburger-button {
+    display: none;
+  }
+}
+
 
