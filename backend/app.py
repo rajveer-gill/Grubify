@@ -247,7 +247,7 @@ def refine_recipe():
         return jsonify({"error": "Failed to refine recipe"}), 500
 
 @app.route('/calculate-nutrition', methods=['POST'])
-@cross_origin(origin="https://grubify.ai", supports_credentials=True)
+@cross_origin()
 def calculate_nutrition():
     try:
         data = request.get_json()
