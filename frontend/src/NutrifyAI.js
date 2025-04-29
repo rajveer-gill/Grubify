@@ -104,6 +104,19 @@ const NutrifyAI = () => {
       return null;
     }
   };
+
+  const handleToggleAllIngredients = () => {
+    const allConfirmed = currentRecipe.ingredients.every(ingredient => ingredient.confirmed);
+    const updatedIngredients = currentRecipe.ingredients.map(ingredient => ({
+      ...ingredient,
+      confirmed: !allConfirmed
+    }));
+    setCurrentRecipe(prev => ({
+      ...prev,
+      ingredients: updatedIngredients
+    }));
+  };
+  
   
   const handleGoogleLogin = async () => {
     try {
@@ -542,8 +555,8 @@ const NutrifyAI = () => {
   const handleSubmitRecipe = async () => {
     if (inputValue.trim() === '') return;
     
-    setLoading(true);
     setFilteredSuggestions([]);
+    setLoading(true);
     setError(null);
     
     try {
@@ -845,7 +858,7 @@ const NutrifyAI = () => {
                       if (e.key === 'Enter' && !loading) handleSubmitRecipe();
                     }}
                   />
-                  {filteredSuggestions.length > 0 && (
+                  {!loading && filteredSuggestions.length > 0 && (
                     <ul className="autocomplete-list">
                       {filteredSuggestions.map((suggestion, index) => (
                         <li
@@ -957,6 +970,23 @@ const NutrifyAI = () => {
             <div className="recipe-content">
               <div className="ingredients-section">
                 <h2>Ingredients</h2>
+                <button
+                  className="toggle-all-button"
+                  onClick={handleToggleAllIngredients}
+                  style={{
+                    backgroundColor: "#4caf50",
+                    color: "white",
+                    border: "none",
+                    padding: "8px 12px",
+                    borderRadius: "6px",
+                    marginBottom: "12px",
+                    cursor: "pointer",
+                    fontWeight: "bold",
+                    fontSize: "14px"
+                  }}
+                >
+                  {currentRecipe.ingredients.every(ing => ing.confirmed) ? "Deselect All" : "Select All"}
+                </button>
                 <div className="ingredients-list">
                 {currentRecipe.ingredients.map((ingredient, index) => (
                   <div

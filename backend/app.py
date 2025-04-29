@@ -5,6 +5,7 @@ from store_handler import fetch_ingredient_prices
 from user import exchange_code_for_token, add_item_to_cart
 from dotenv import load_dotenv
 from data import Database
+import json as json_lib
 import requests
 import os
 
@@ -28,6 +29,63 @@ app.config['SESSION_COOKIE_SECURE'] = True  # Ensure cookies are only sent over 
 CLIENT_ID = os.environ["KROGER_CLIENT_ID"]
 REDIRECT_URI = "https://grubify.onrender.com/callback"
 AUTH_URL = "https://api.kroger.com/v1/connect/oauth2/authorize"  # Add this line
+
+UNIT_TO_GRAMS = {
+    'tablespoon': 15,  # very rough average
+    'teaspoon': 5,
+    'cup': 240,
+    'gram': 1,
+    'g': 1,
+    'ounce': 28.35,
+    'oz': 28.35,
+    'pound': 453.6,
+    'lb': 453.6
+}
+
+def estimate_grams_from_text(ingredient_text):
+    quantities = quantulum_parser.parse(ingredient_text)
+    if not quantities:
+        return None
+    
+    for quantity in quantities:
+        unit_name = quantity.unit.name.lower()
+        value = quantity.value
+        
+        if unit_name in UNIT_TO_GRAMS:
+            return value * UNIT_TO_GRAMS[unit_name]
+    
+    return None
+
+def fetch_nutrition_from_spoonacular(ingredient_name):
+    url = f"https://api.spoonacular.com/food/ingredients/search"
+    params = {
+        "query": ingredient_name,
+        "apiKey": SPOONACULAR_API_KEY
+    }
+    response = requests.get(url, params=params)
+
+    if response.status_code != 200:
+        return None
+
+    data = response.json()
+    if not data.get('results'):
+        return None
+
+    ingredient_id = data['results'][0]['id']
+    
+    # Now get detailed info
+    url_info = f"https://api.spoonacular.com/food/ingredients/{ingredient_id}/information"
+    params_info = {
+        "amount": 100,
+        "unit": "g",
+        "apiKey": SPOONACULAR_API_KEY
+    }
+    response_info = requests.get(url_info, params=params_info)
+
+    if response_info.status_code != 200:
+        return None
+
+    return response_info.json()
 
 @app.route("/test", methods=["GET", "POST"])
 def test():
@@ -240,8 +298,17 @@ def refine_recipe():
     )
 
     if response.status_code == 200:
-        new_recipe = response.json()["choices"][0]["message"]["content"]
-        return jsonify({"updated_recipe": new_recipe})
+        response_text = response.json()["choices"][0]["message"]["content"]
+        
+        try:
+            json_start = response_text.find('{')
+            json_data = response_text[json_start:]
+            parsed_recipe = json_lib.loads(json_data)
+            return jsonify(parsed_recipe)
+        except Exception as e:
+            print("❌ Failed to parse recipe JSON:", str(e))
+            print("🔎 Raw response text:", response_text)
+            return jsonify({"error": "Failed to parse structured recipe"}), 500
     else:
         print("Error refining recipe:", response.text)
         return jsonify({"error": "Failed to refine recipe"}), 500
@@ -256,80 +323,54 @@ def calculate_nutrition():
         if not ingredients:
             return jsonify({"error": "No ingredients provided"}), 400
 
-        total_calories = 0
-        total_protein = 0
-        total_carbs = 0
-        total_fat = 0
-        total_fiber = 0
-        total_sugar = 0
-        total_sodium = 0
+        total_nutrition = {
+            'calories': 0,
+            'protein': 0,
+            'fat': 0,
+            'carbs': 0,
+            'sugar': 0
+        }
 
-        for item in ingredients:
-            ingredient_name = item.get('name')
-            amount = item.get('amount', '')
+        for ingredient in ingredients:
+            ingredient_name = ingredient.get('name', '')
+            ingredient_amount = ingredient.get('amount', '')
 
             if not ingredient_name:
                 continue
 
-            # Search for ingredient nutrition
-            search_url = f"https://api.spoonacular.com/food/ingredients/search"
-            search_params = {
-                "query": ingredient_name,
-                "apiKey": SPOONACULAR_API_KEY
-            }
-            search_response = requests.get(search_url, params=search_params)
-            search_data = search_response.json()
+            grams_estimated = estimate_grams_from_text(ingredient_amount)
+            if grams_estimated is None:
+                grams_estimated = 100  # fallback if we can't parse, assume 100g
 
-            if not search_data.get('results'):
-                continue  # No ingredient found
+            nutrition_data = fetch_nutrition_from_spoonacular(ingredient_name)
+            if not nutrition_data:
+                continue  # skip if lookup failed
 
-            ingredient_id = search_data['results'][0]['id']
-
-            # Get detailed nutrition info
-            info_url = f"https://api.spoonacular.com/food/ingredients/{ingredient_id}/information"
-            info_params = {
-                "amount": 1,
-                "unit": "serving",
-                "apiKey": SPOONACULAR_API_KEY
-            }
-            info_response = requests.get(info_url, params=info_params)
-            info_data = info_response.json()
-
-            # Pull macros
-            nutrition = info_data.get('nutrition', {})
-            nutrients = nutrition.get('nutrients', [])
+            nutrients = nutrition_data.get('nutrition', {}).get('nutrients', [])
 
             calories = next((n['amount'] for n in nutrients if n['name'] == 'Calories'), 0)
             protein = next((n['amount'] for n in nutrients if n['name'] == 'Protein'), 0)
-            carbs = next((n['amount'] for n in nutrients if n['name'] == 'Carbohydrates'), 0)
             fat = next((n['amount'] for n in nutrients if n['name'] == 'Fat'), 0)
-            fiber = next((n['amount'] for n in nutrients if n['name'] == 'Fiber'), 0)
+            carbs = next((n['amount'] for n in nutrients if n['name'] == 'Carbohydrates'), 0)
             sugar = next((n['amount'] for n in nutrients if n['name'] == 'Sugar'), 0)
-            sodium = next((n['amount'] for n in nutrients if n['name'] == 'Sodium'), 0)
 
+            scaling_factor = grams_estimated / 100
 
-            total_calories += calories
-            total_protein += protein
-            total_carbs += carbs
-            total_fat += fat
-            total_fiber += fiber
-            total_sugar += sugar
-            total_sodium += sodium
+            total_nutrition['calories'] += calories * scaling_factor
+            total_nutrition['protein'] += protein * scaling_factor
+            total_nutrition['fat'] += fat * scaling_factor
+            total_nutrition['carbs'] += carbs * scaling_factor
+            total_nutrition['sugar'] += sugar * scaling_factor
 
+        # round the results nicely
+        for key in total_nutrition:
+            total_nutrition[key] = round(total_nutrition[key], 2)
 
-        return jsonify({
-            "calories": round(total_calories),
-            "protein": round(total_protein, 1),
-            "carbs": round(total_carbs, 1),
-            "fat": round(total_fat, 1),
-            "fiber": round(total_fiber, 1),
-            "sugar": round(total_sugar, 1),
-            "sodium": round(total_sodium)
-        })
+        return jsonify(total_nutrition)
 
     except Exception as e:
-        print(f"🔥 Error calculating nutrition: {str(e)}")
-        return jsonify({"error": "Failed to calculate nutrition"}), 500
+        print("Error calculating nutrition:", str(e))
+        return jsonify({"error": "Server error calculating nutrition"}), 500
 
 
 
