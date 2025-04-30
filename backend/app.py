@@ -44,18 +44,59 @@ UNIT_TO_GRAMS = {
 }
 
 def estimate_grams_from_text(ingredient_text):
+    if not ingredient_text or not isinstance(ingredient_text, str):
+        return None
+
     quantities = quantulum_parser.parse(ingredient_text)
     if not quantities:
         return None
-    
+
+    # common per-cup gram estimates for various ingredients
+    INGREDIENT_DENSITY = {
+        "all-purpose flour": 120,
+        "flour": 120,
+        "sugar": 200,
+        "brown sugar": 220,
+        "butter": 227,   # 1 cup = ~2 sticks = 227g
+        "milk": 245,
+        "vanilla extract": 4.2,  # 1 tsp ~ 4.2g
+        "baking powder": 4.6,    # 1 tsp ~ 4.6g
+        "salt": 6,               # 1 tsp ~ 6g
+        "egg": 50,
+        "eggs": 50
+    }
+
     for quantity in quantities:
         unit_name = quantity.unit.name.lower()
         value = quantity.value
-        
+        ingredient_lower = ingredient_text.lower()
+
+        # cup-based ingredient-specific estimates
+        if unit_name == "cup":
+            for name, grams_per_cup in INGREDIENT_DENSITY.items():
+                if name in ingredient_lower:
+                    return value * grams_per_cup
+            return value * 240  # fallback for unknown cups
+
+        # teaspoon-based conversion (1 cup = ~48 tsp)
+        if unit_name == "teaspoon":
+            for name, grams_per_cup in INGREDIENT_DENSITY.items():
+                if name in ingredient_lower:
+                    return value * (grams_per_cup / 48)
+            return value * 5  # fallback tsp
+
+        # tablespoon-based conversion (1 cup = ~16 tbsp)
+        if unit_name == "tablespoon":
+            for name, grams_per_cup in INGREDIENT_DENSITY.items():
+                if name in ingredient_lower:
+                    return value * (grams_per_cup / 16)
+            return value * 15  # fallback tbsp
+
         if unit_name in UNIT_TO_GRAMS:
             return value * UNIT_TO_GRAMS[unit_name]
-    
+
     return None
+
 
 def fetch_nutrition_from_spoonacular(ingredient_name):
     url = f"https://api.spoonacular.com/food/ingredients/search"
