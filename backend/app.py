@@ -418,11 +418,11 @@ def calculate_nutrition():
 
             print(f"🧪 {ingredient_name} nutrients:", [n['name'] for n in nutrients])
 
-            calories = next((n['amount'] for n in nutrients if n['name'] == 'Calories'), 0)
-            protein = next((n['amount'] for n in nutrients if n['name'] == 'Protein'), 0)
-            fat = next((n['amount'] for n in nutrients if n['name'] == 'Fat'), 0)
-            carbs = next((n['amount'] for n in nutrients if n['name'] == 'Carbohydrates'), 0)
-            sugar = next((n['amount'] for n in nutrients if n['name'] == 'Sugar'), 0)
+            calories = next((n['amount'] for n in nutrients if n['name'].lower() == 'calories'), 0)
+            protein = next((n['amount'] for n in nutrients if n['name'].lower() == 'protein'), 0)
+            fat = next((n['amount'] for n in nutrients if n['name'].lower() == 'fat'), 0)
+            carbs = next((n['amount'] for n in nutrients if 'carbohydrate' in n['name'].lower()), 0)
+            sugar = next((n['amount'] for n in nutrients if 'sugar' in n['name'].lower()), 0)
             fiber = next((n['amount'] for n in nutrients if 'fiber' in n['name'].lower()), 0)
             sodium = next((n['amount'] for n in nutrients if 'sodium' in n['name'].lower()), 0)
 
