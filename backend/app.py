@@ -97,73 +97,27 @@ def estimate_grams_from_text(ingredient_text):
 
     return None
 
-def normalize_ingredient_name(name):
-    name = name.lower().strip()
-
-    # remove stuff like "2 steaks (8 oz each)"
-    import re
-    name = re.sub(r"\(.*?\)", "", name)
-    name = re.sub(r"\d+[^\s]*", "", name)  # remove quantities
-    name = re.sub(r"[^a-z\s]", "", name)
-    name = name.strip()
-
-    # manually correct known issues
-    replacements = {
-        "steak": "ribeye steak",
-        "whole milk": "milk",
-        "unsalted butter": "butter",
-        "granulated sugar": "sugar",
-        "all purpose flour": "flour",
-        "large eggs": "eggs",
-    }
-
-    return replacements.get(name, name)
-
-STABLE_INGREDIENT_IDS = {
-    "flour": 20081,
-    "sugar": 19335,
-    "brown sugar": 19334,
-    "butter": 1001,
-    "milk": 1077,
-    "vanilla extract": 2050,
-    "baking powder": 18371,
-    "salt": 2047,
-    "eggs": 1123,
-    "egg": 1123,
-    "ribeye steak": 23618,
-    "black beans": 16015,
-    "olive oil": 4053,
-    "garlic": 11215,
-    "pepper": 2030
-}
-
 
 
 
 def fetch_nutrition_from_spoonacular(ingredient_name):
-    normalized = normalize_ingredient_name(ingredient_name)
-    print(f"🔍 Ingredient: {ingredient_name} → Normalized: {normalized}")
+    url = f"https://api.spoonacular.com/food/ingredients/search"
+    params = {
+        "query": ingredient_name,
+        "apiKey": SPOONACULAR_API_KEY
+    }
+    response = requests.get(url, params=params)
 
-    ingredient_id = STABLE_INGREDIENT_IDS.get(normalized)
+    if response.status_code != 200:
+        return None
 
-    if ingredient_id:
-        print(f"📌 Using fixed ID: {ingredient_id} for {normalized}")
-    else:
-        print(f"⚠️ No fixed ID for {normalized}, using search fallback")
-        search_url = f"https://api.spoonacular.com/food/ingredients/search"
-        params = {
-            "query": normalized,
-            "apiKey": SPOONACULAR_API_KEY
-        }
-        response = requests.get(search_url, params=params)
+    data = response.json()
+    if not data.get('results'):
+        return None
 
-        if response.status_code != 200 or not response.json().get("results"):
-            print(f"❌ Spoonacular search failed for {normalized}")
-            return None
-
-        ingredient_id = response.json()["results"][0]["id"]
-
-    # Get detailed info
+    ingredient_id = data['results'][0]['id']
+    
+    # Now get detailed info
     url_info = f"https://api.spoonacular.com/food/ingredients/{ingredient_id}/information"
     params_info = {
         "amount": 100,
@@ -173,11 +127,9 @@ def fetch_nutrition_from_spoonacular(ingredient_name):
     response_info = requests.get(url_info, params=params_info)
 
     if response_info.status_code != 200:
-        print(f"❌ Failed to fetch nutrition for {normalized}")
         return None
 
     return response_info.json()
-
 
 @app.route("/test", methods=["GET", "POST"])
 def test():
