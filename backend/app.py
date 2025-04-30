@@ -327,9 +327,11 @@ def calculate_nutrition():
         total_nutrition = {
             'calories': 0,
             'protein': 0,
-            'fat': 0,
             'carbs': 0,
-            'sugar': 0
+            'fat': 0,
+            'fiber': 0,
+            'sugar': 0,
+            'sodium': 0
         }
 
         for ingredient in ingredients:
@@ -348,12 +350,16 @@ def calculate_nutrition():
                 continue  # skip if lookup failed
 
             nutrients = nutrition_data.get('nutrition', {}).get('nutrients', [])
+            print(f"🧪 {ingredient_name} nutrients:", [n['name'] for n in nutrients])
 
             calories = next((n['amount'] for n in nutrients if n['name'] == 'Calories'), 0)
             protein = next((n['amount'] for n in nutrients if n['name'] == 'Protein'), 0)
             fat = next((n['amount'] for n in nutrients if n['name'] == 'Fat'), 0)
             carbs = next((n['amount'] for n in nutrients if n['name'] == 'Carbohydrates'), 0)
             sugar = next((n['amount'] for n in nutrients if n['name'] == 'Sugar'), 0)
+            fiber = next((n['amount'] for n in nutrients if 'fiber' in n['name'].lower()), 0)
+            sodium = next((n['amount'] for n in nutrients if 'sodium' in n['name'].lower()), 0)
+
 
             scaling_factor = grams_estimated / 100
 
@@ -362,6 +368,9 @@ def calculate_nutrition():
             total_nutrition['fat'] += fat * scaling_factor
             total_nutrition['carbs'] += carbs * scaling_factor
             total_nutrition['sugar'] += sugar * scaling_factor
+            total_nutrition['fiber'] += fiber * scaling_factor
+            total_nutrition['sodium'] += sodium * scaling_factor
+
 
         # round the results nicely
         for key in total_nutrition:
