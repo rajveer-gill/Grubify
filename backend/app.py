@@ -5,6 +5,7 @@ from store_handler import fetch_ingredient_prices
 from user import exchange_code_for_token, add_item_to_cart
 from dotenv import load_dotenv
 from data import Database
+from quantulum3 import parser as quantulum_parser
 import json as json_lib
 import requests
 import os
