@@ -97,39 +97,55 @@ def estimate_grams_from_text(ingredient_text):
 
     return None
 
-
+def normalize_ingredient_name(name):
+    import re
+    name = name.lower().strip()
+    name = re.sub(r"\(.*?\)", "", name)  # remove anything in parentheses
+    name = re.sub(r"\d+[^\s]*", "", name)  # remove "8oz", "2tbsp", etc.
+    name = re.sub(r"[^a-z\s]", "", name)  # strip punctuation
+    return name.strip()
 
 
 def fetch_nutrition_from_spoonacular(ingredient_name):
+    cleaned = normalize_ingredient_name(ingredient_name)
+    print(f"🧼 Ingredient: {ingredient_name} → Cleaned: {cleaned}")
+
+    # Step 1: Search Spoonacular for the ingredient
     url = f"https://api.spoonacular.com/food/ingredients/search"
     params = {
-        "query": ingredient_name,
+        "query": cleaned,
         "apiKey": SPOONACULAR_API_KEY
     }
     response = requests.get(url, params=params)
 
     if response.status_code != 200:
+        print(f"❌ Failed to search ingredient: {cleaned}")
         return None
 
     data = response.json()
-    if not data.get('results'):
+    results = data.get("results", [])
+    if not results:
+        print(f"⚠️ No matches for: {cleaned}")
         return None
 
-    ingredient_id = data['results'][0]['id']
-    
-    # Now get detailed info
+    # Step 2: Get nutrition info for the top match
+    ingredient_id = results[0]["id"]
+    print(f"📎 Matched {cleaned} → ID: {ingredient_id}")
+
     url_info = f"https://api.spoonacular.com/food/ingredients/{ingredient_id}/information"
     params_info = {
         "amount": 100,
         "unit": "g",
         "apiKey": SPOONACULAR_API_KEY
     }
-    response_info = requests.get(url_info, params=params_info)
+    info_res = requests.get(url_info, params=params_info)
 
-    if response_info.status_code != 200:
+    if info_res.status_code != 200:
+        print(f"❌ Failed to fetch nutrition info for ID: {ingredient_id}")
         return None
 
-    return response_info.json()
+    return info_res.json()
+
 
 @app.route("/test", methods=["GET", "POST"])
 def test():
