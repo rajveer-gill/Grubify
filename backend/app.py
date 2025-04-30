@@ -401,14 +401,21 @@ def calculate_nutrition():
                 continue
 
             grams_estimated = estimate_grams_from_text(ingredient_amount)
+            print("🧪 INGREDIENT INPUT:", ingredient_name, "(", ingredient_amount, ")")
+            print("📦 ESTIMATED GRAMS:", grams_estimated)
+
             if grams_estimated is None:
                 grams_estimated = 100  # fallback if we can't parse, assume 100g
 
             nutrition_data = fetch_nutrition_from_spoonacular(ingredient_name)
             if not nutrition_data:
+                print("❌ No nutrition data found for:", ingredient_name)
                 continue  # skip if lookup failed
 
             nutrients = nutrition_data.get('nutrition', {}).get('nutrients', [])
+            print("✅ SPOONACULAR MATCH:", nutrition_data.get("name", "unknown"))
+            print("📊 Nutrients returned:", [n['name'] for n in nutrients])
+
             print(f"🧪 {ingredient_name} nutrients:", [n['name'] for n in nutrients])
 
             calories = next((n['amount'] for n in nutrients if n['name'] == 'Calories'), 0)
