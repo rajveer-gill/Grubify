@@ -426,6 +426,16 @@ def calculate_nutrition():
             fiber = next((n['amount'] for n in nutrients if 'fiber' in n['name'].lower()), 0)
             sodium = next((n['amount'] for n in nutrients if 'sodium' in n['name'].lower()), 0)
 
+            print(f"📥 Nutrient values for {ingredient_name}:")
+            print(f"  Calories: {calories}")
+            print(f"  Protein: {protein}g")
+            print(f"  Fat: {fat}g")
+            print(f"  Carbs: {carbs}g")
+            print(f"  Sugar: {sugar}g")
+            print(f"  Fiber: {fiber}g")
+            print(f"  Sodium: {sodium}mg")
+            print(f"  Scaling by: {scaling_factor}")
+
 
             scaling_factor = grams_estimated / 100
 
@@ -436,6 +446,10 @@ def calculate_nutrition():
             total_nutrition['sugar'] += sugar * scaling_factor
             total_nutrition['fiber'] += fiber * scaling_factor
             total_nutrition['sodium'] += sodium * scaling_factor
+
+            print("📊 Running totals:")
+            for k, v in total_nutrition.items():
+                print(f"  {k}: {v}")
 
 
         # round the results nicely
