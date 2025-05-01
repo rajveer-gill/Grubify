@@ -434,10 +434,11 @@ def calculate_nutrition():
             print(f"  Sugar: {sugar}g")
             print(f"  Fiber: {fiber}g")
             print(f"  Sodium: {sodium}mg")
-            print(f"  Scaling by: {scaling_factor}")
 
 
             scaling_factor = grams_estimated / 100
+
+            print(f"  Scaling by: {scaling_factor}")
 
             total_nutrition['calories'] += calories * scaling_factor
             total_nutrition['protein'] += protein * scaling_factor

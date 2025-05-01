@@ -499,7 +499,7 @@ const NutrifyAI = () => {
       }
       
       const data = await response.json();
-      return data.updated_recipe;
+      return data; // This way it can be parsed later
     } catch (error) {
       console.error('Error modifying recipe:', error);
       throw error;
@@ -610,11 +610,10 @@ const NutrifyAI = () => {
     try {
       // Call the API to modify the recipe
       const modifiedRecipe = await modifyRecipeFromAPI(currentRecipe, chatInput);
-      const parsedRecipe = JSON.parse(modifiedRecipe);
   
       const updatedRecipe = {
-        ...parsedRecipe,
-        ingredients: parsedRecipe.ingredients.map(newIngredient => {
+        ...modifiedRecipe,
+        ingredients: modifiedRecipe.ingredients.map(newIngredient => {
           const existingIngredient = currentRecipe.ingredients.find(
             ing => ing.name.toLowerCase() === newIngredient.name.toLowerCase()
           );
