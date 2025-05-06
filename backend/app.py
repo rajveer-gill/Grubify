@@ -17,9 +17,9 @@ app = Flask(__name__)
 app.secret_key = "some-secret-key"  # Required for session management
 SPOONACULAR_API_KEY = os.environ.get('SPOONACULAR_API_KEY')
 
+# Enable CORS (allow credentials) on every route
+CORS(app, origins=["https://grubify.ai"], supports_credentials=True)
 
-# Enable CORS with credentials
-CORS(app, resources={r"/*": {"origins": "https://grubify.ai"}})
 
 
 # Configure session cookies for cross-origin requests
@@ -321,7 +321,7 @@ def callback():
     # Redirect back to the React app with a success query parameter
     return redirect("https://grubify.ai/?authSuccess=true")
 
-@app.route("/token", methods=["GET"])
+@app.route("/token/", methods=["GET"])
 @cross_origin(origin="https://grubify.ai", methods=["GET"], supports_credentials=True)
 def token():
     """

@@ -326,7 +326,10 @@ const NutrifyAI = () => {
       setKrogerSignInAuthed(true);
       console.log("User authenticated successfully via callback.");
       // …and grab/store the user‑level token
-      fetch("https://grubify.onrender.com/token")
+      fetch("https://grubify.onrender.com/token", {
+        method: "GET",
+        credentials: "include"  // ← send the session cookie
+      })
         .then(res => res.json())
         .then(d => {
           localStorage.setItem("kroger_user_token", d.user_token);
