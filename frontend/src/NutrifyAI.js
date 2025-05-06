@@ -562,7 +562,9 @@ const NutrifyAI = () => {
             "Content-Type": "application/json",
             Authorization: `Bearer ${userToken}`,
           },
-          body: JSON.stringify({ items }),
+          body: JSON.stringify({
+            items: items.map(i => i.name)   // send ["avocado","kale",…], not full objects
+          }),
         }
       );
       const data = await res.json();

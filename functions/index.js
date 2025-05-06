@@ -108,6 +108,7 @@ exports.generateRecipe = onRequest({ secrets: [openaiKey] }, async (req, res) =>
       }
       
       try {  
+        console.log("📝 addToKrogerCart payload:", req.body);
         const items = req.body.items;
         if (!items || !Array.isArray(items) || items.length === 0) {
           return res.status(400).json({ error: "No items provided" });
