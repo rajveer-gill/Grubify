@@ -189,9 +189,19 @@ exports.generateRecipe = onRequest({ secrets: [openaiKey] }, async (req, res) =>
         try {
           const addRes = await axios.put(
             "https://api.kroger.com/v1/cart/add",
-            { items: [{ upc: productId, quantity: 1, modality: "PICKUP" }] },
+            {
+              items: [
+                {
+                  upc: productId,
+                  quantity: 1,
+                  modality: "PICKUP",
+                  locationId   // ← include the store location here
+                }
+              ]
+            },
             { headers: { Authorization: `Bearer ${userToken}` } }
           );
+                    
           return res.status(addRes.status).json({ success: true });
         } catch (err) {
           console.error("🔥 Kroger add-to-cart failed:", err.response?.data || err.message);
