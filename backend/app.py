@@ -147,9 +147,14 @@ def fetch_nutrition_from_spoonacular(ingredient_name):
     return info_res.json()
 
 
-@app.route("/test", methods=["GET", "POST"])
+
+@app.route("/test", methods=["GET","POST"])
+@cross_origin(origin="https://grubify.ai",
+              methods=["GET","POST"],
+              supports_credentials=True)
 def test():
     return jsonify({"message": "CORS test endpoint"}), 200
+
 
 @app.route("/")
 def home():
@@ -385,7 +390,9 @@ def refine_recipe():
         return jsonify({"error": "Failed to refine recipe"}), 500
 
 @app.route('/calculate-nutrition', methods=['POST'])
-@cross_origin()
+@cross_origin(origin="https://grubify.ai",
+              methods=["POST"],
+              supports_credentials=True)
 def calculate_nutrition():
     try:
         data = request.get_json()
