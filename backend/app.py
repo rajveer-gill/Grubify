@@ -321,6 +321,17 @@ def callback():
     # Redirect back to the React app with a success query parameter
     return redirect("https://grubify.ai/?authSuccess=true")
 
+@app.route("/token", methods=["GET"])
+@cross_origin(origin="https://grubify.ai", methods=["GET"], supports_credentials=True)
+def token():
+    """
+    Returns the user-level Kroger token stored in session.
+    """
+    user_token = session.get("kroger_user_token")
+    if not user_token:
+        return jsonify({"error": "User not logged in to Kroger"}), 401
+    return jsonify({"user_token": user_token})
+
 @app.route("/refine-recipe", methods=["POST"])
 def refine_recipe():
     data = request.get_json()
