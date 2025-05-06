@@ -179,8 +179,12 @@ exports.generateRecipe = onRequest({ secrets: [openaiKey] }, async (req, res) =>
         const product = sampleRes.data.data[0].items[0];
         const { productId, locationId } = product;
 
-        // pull user token from Authorization header (frontend must send it)
-        const userToken = req.headers.authorization?.split(" ")[1];
+        // DEBUG: see what the function is receiving
+        const authHeader = req.headers.authorization;
+        console.log("🔑 addToKrogerCart received Authorization header:", authHeader);
+        const userToken = authHeader?.split(" ")[1];
+        console.log("🔑 Parsed userToken:", userToken);
+
         if (!userToken) {
           return res.status(401).json({ error: "Missing Kroger user token" });
         }
@@ -201,7 +205,7 @@ exports.generateRecipe = onRequest({ secrets: [openaiKey] }, async (req, res) =>
             },
             { headers: { Authorization: `Bearer ${userToken}` } }
           );
-                    
+
           return res.status(addRes.status).json({ success: true });
         } catch (err) {
           console.error("🔥 Kroger add-to-cart failed:", err.response?.data || err.message);
