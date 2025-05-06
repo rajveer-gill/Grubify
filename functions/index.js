@@ -138,14 +138,17 @@ exports.generateRecipe = onRequest({ secrets: [openaiKey] }, async (req, res) =>
         for (const item of items) {
           try {
             const response = await axios.get(
-              `https://api.kroger.com/v1/products?filter.term=${encodeURIComponent(item)}&filter.locationId=01400443`,
+              `https://api.kroger.com/v1/products?filter.term=${encodeURIComponent(item)}`,
               {
                 headers: {
                   Authorization: `Bearer ${accessToken}`,
                 },
               }
             );
-            results.push({ item, result: response.data });
+            // extract the first matching product/item
+            const productData = response.data.data?.[0]?.items?.[0];
+            if (!productData) throw new Error("No products found");
+            results.push({ item, productData });
           } catch (innerError) {
             console.error(`❌ Error fetching "${item}":`, innerError.response?.data || innerError.message);
             results.push({ item, error: true });
@@ -162,7 +165,7 @@ exports.generateRecipe = onRequest({ secrets: [openaiKey] }, async (req, res) =>
         // Example: search Kroger products for the first item
         
         const sampleRes = await axios.get(
-          `https://api.kroger.com/v1/products?filter.term=${encodeURIComponent(items[0])}&filter.locationId=01400443`,
+          `https://api.kroger.com/v1/products?filter.term=${encodeURIComponent(items[0])}`,
           {
             headers: {
               Authorization: `Bearer ${accessToken}`,

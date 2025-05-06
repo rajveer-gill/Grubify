@@ -563,7 +563,7 @@ const NutrifyAI = () => {
             Authorization: `Bearer ${userToken}`,
           },
           body: JSON.stringify({
-            items: items.map(i => i.name)   // send ["avocado","kale",…], not full objects
+            items: items   // send ["avocado","kale",…], not full objects
           }),
         }
       );
