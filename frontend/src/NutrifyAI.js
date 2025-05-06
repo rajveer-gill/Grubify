@@ -320,13 +320,23 @@ const NutrifyAI = () => {
   };
 
   useEffect(() => {
-    // Check if the user was redirected with an auth success parameter
     const authSuccess = getQueryParam("authSuccess");
     if (authSuccess === "true") {
-      setKrogerSignInAuthed(true); // Update the button state to green
+      // mark UI as logged‑in…
+      setKrogerSignInAuthed(true);
       console.log("User authenticated successfully via callback.");
+      // …and grab/store the user‑level token
+      fetch("https://grubify.onrender.com/token")
+        .then(res => res.json())
+        .then(d => {
+          localStorage.setItem("kroger_user_token", d.user_token);
+          console.log("🔑 Stored Kroger user token");
+        })
+        .catch(err => console.error("token fetch failed:", err));
     }
   }, []);
+
+  
   
     // Refresh the user's email verification status
   useEffect(() => {
@@ -531,24 +541,40 @@ const NutrifyAI = () => {
     }
   };
   
-  // Function to add items to cart
+  // Function to add items to cart (include Kroger user token)
   const addItemsToCart = async (items) => {
+    // grab the logged-in Kroger token (set by your OAuth callback)
+    const userToken = localStorage.getItem("kroger_user_token");
+    if (!userToken) {
+      toast.error("🔐 Please log in to Kroger first.");
+      return { success: false };
+    }
+
     try {
-      const res = await fetch("https://us-central1-grubify-9cf13.cloudfunctions.net/addToKrogerCart", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ items }),
-      });
-  
+      const res = await fetch(
+        "https://us-central1-grubify-9cf13.cloudfunctions.net/addToKrogerCart",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${userToken}`,
+          },
+          body: JSON.stringify({ items }),
+        }
+      );
       const data = await res.json();
-      console.log("📦 Kroger add-to-cart result:", data);
-      return data;
+      if (!res.ok) {
+        toast.error(`❌ ${data.error || "Could not add to cart"}`);
+        return { success: false };
+      }
+      toast.success("✅ Added to Kroger cart!");
+      return { success: true };
     } catch (err) {
-      console.error("🚨 Failed to add items to Kroger:", err);
+      console.error("addItemsToCart error:", err);
+      toast.error("❌ Network error, try again.");
       return { success: false };
     }
   };
-  
   
   
   // Handle recipe submission with API call

@@ -112,43 +112,54 @@ class KrogerAPI:
         cheapest_items = {}
 
         for item in search_items:
+            search_variants = [
+                item,
+                item.replace("softened", "").replace("granulated", "").replace("unsalted", "").replace("large", ""),
+                item.split(",")[0],
+                item.split()[0]
+            ]
+
             lowest_price = float('inf')
             lowest_price_upc = None
 
-            params = {
-                "filter.term": item,
-                "filter.limit": limit,
-                "filter.start": start
-            }
+            for term in search_variants:
+                params = {
+                    "filter.term": term.strip(),
+                    "filter.limit": limit,
+                    "filter.start": start
+                }
 
-            if location_id:
-                params["filter.locationId"] = location_id
+                if location_id:
+                    params["filter.locationId"] = location_id
 
-            response = requests.get(url, headers=headers, params=params)
+                response = requests.get(url, headers=headers, params=params)
 
-            if response.status_code == 200:
-                data = response.json()
-                for product in data.get("data", []):
-                    price = product.get("items", [{}])[0].get("price", {}).get("regular", None)
-                    upc = product.get("upc", None)
+                if response.status_code == 200:
+                    data = response.json()
+                    for product in data.get("data", []):
+                        price = product.get("items", [{}])[0].get("price", {}).get("regular", None)
+                        upc = product.get("upc", None)
 
-                    if price is not None and upc is not None:
-                        try:
-                            price = float(price)
-                            if price < lowest_price:
-                                lowest_price = price
-                                lowest_price_upc = upc
-                        except ValueError:
-                            continue  # Skip invalid price values
+                        if price is not None and upc is not None:
+                            try:
+                                price = float(price)
+                                if price < lowest_price:
+                                    lowest_price = price
+                                    lowest_price_upc = upc
+                            except ValueError:
+                                continue
 
-            else:
-                print(f"Error fetching {item}: {response.status_code}, {response.text}")
+                    if lowest_price_upc:
+                        break  # stop once a valid UPC is found
 
-            # Store the cheapest item's UPC and price for this search term
+                else:
+                    print(f"❌ Error fetching '{term}': {response.status_code} - {response.text}")
+
             cheapest_items[item] = {
                 "UPC": lowest_price_upc,
-                "Price": lowest_price if lowest_price != float('inf') else None
+                "Price": lowest_price if lowest_price_upc else None
             }
+
 
         return cheapest_items
 #returns stuff in this format
