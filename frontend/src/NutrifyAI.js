@@ -280,6 +280,7 @@ const NutrifyAI = () => {
     try {
       const response = await fetch('https://grubify.onrender.com/calculate-nutrition', {
         method: 'POST',
+        mode: "cors",
         headers: {
           'Content-Type': 'application/json',
         },
@@ -726,7 +727,7 @@ const NutrifyAI = () => {
     setCartStatus('adding'); // Show "adding" overlay
   
     try {
-      const result = await addItemsToCart(confirmedIngredients, 'kroger');
+      const result = addItemsToCart(confirmedIngredients, 'kroger');
   
       if (result.success) {
         setCartStatus('success');

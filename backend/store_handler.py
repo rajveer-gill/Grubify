@@ -1,5 +1,6 @@
 import requests
 import base64
+import os
 
 # Define what gets exported when someone imports from this file
 __all__ = ['fetch_ingredient_prices', 'KrogerAPI']
@@ -174,8 +175,8 @@ def fetch_ingredient_prices(ingredients, store="kroger"):
     from dotenv import load_dotenv
     load_dotenv()  # Ensure KROGER_CLIENT_ID, KROGER_CLIENT_SECRET are in .env
 
-    client_id = os.getenv("CLIENT_ID")
-    client_secret = os.getenv("CLIENT_SECRET")
+    client_id = os.getenv("KROGER_CLIENT_ID")
+    client_secret = os.getenv("KROGER_CLIENT_SECRET")
 
     if not client_id or not client_secret:
         return {"error": "Kroger credentials not found in environment variables."}
