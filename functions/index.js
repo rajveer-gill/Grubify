@@ -175,9 +175,13 @@ exports.generateRecipe = onRequest({ secrets: [openaiKey] }, async (req, res) =>
     
         console.log("🔍 Kroger product search result:", sampleRes.data);
 
-        // extract the first matching item's IDs
-        const product = sampleRes.data.data[0].items[0];
-        const { productId, locationId } = product;
+        // extract UPC from the first matching product
+        const product = sampleRes.data.data && sampleRes.data.data[0];
+        const { upc } = product || {};
+
+        if (!upc) {
+          throw new Error("No UPC found for product");
+        }
 
         // DEBUG: see what the function is receiving
         const authHeader = req.headers.authorization;
@@ -196,10 +200,9 @@ exports.generateRecipe = onRequest({ secrets: [openaiKey] }, async (req, res) =>
             {
               items: [
                 {
-                  upc: productId,
+                  upc,
                   quantity: 1,
-                  modality: "PICKUP",
-                  locationId   // ← include the store location here
+                  modality: "PICKUP"
                 }
               ]
             },
