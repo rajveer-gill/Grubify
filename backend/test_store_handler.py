@@ -1,7 +1,7 @@
 import pytest
 import requests
 from unittest.mock import MagicMock
-from your_kroger_file import KrogerAPI  # Replace 'your_kroger_file' with your actual filename
+from store_handler import KrogerAPI
 
 @pytest.fixture
 def kroger_api():

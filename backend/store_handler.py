@@ -200,28 +200,46 @@ def fetch_ingredient_prices(ingredients, store="kroger"):
             location_id=store_id,
             limit=1
         )
-        if products:
-            product = products[0]
-            results.append({
-                "ingredient": ing,
-                "productName": product["name"],
-                "price": product["price"],
-            })
+        # search_products returns a dict like {'milk': {'UPC': '...', 'Price': 2.99}}
+        if products and ing in products:
+            product_data = products[ing]
+            if product_data.get("UPC") and product_data.get("Price"):
+                results.append({
+                    "ingredient": ing,
+                    "productName": ing,  # We don't get product name from search_products
+                    "price": product_data["Price"],
+                    "upc": product_data["UPC"]
+                })
+            else:
+                # Product found but no price/UPC available
+                results.append({
+                    "ingredient": ing,
+                    "productName": None,
+                    "price": None,
+                    "upc": None
+                })
         else:
             # If no product found, return a None entry
             results.append({
                 "ingredient": ing,
                 "productName": None,
                 "price": None,
+                "upc": None
             })
     return results
 
 # I didn't make this but I didn't want to delete it either
 
-# Example usage:
+# Example usage (requires KROGER_CLIENT_ID and KROGER_CLIENT_SECRET in .env or environment):
 if __name__ == "__main__":
-    
-    kroger_api = KrogerAPI(CLIENT_ID, CLIENT_SECRET)
+    from dotenv import load_dotenv
+    load_dotenv()
+    _cid = os.getenv("KROGER_CLIENT_ID")
+    _csec = os.getenv("KROGER_CLIENT_SECRET")
+    if not _cid or not _csec:
+        print("Set KROGER_CLIENT_ID and KROGER_CLIENT_SECRET in .env or the environment.")
+        raise SystemExit(1)
+    kroger_api = KrogerAPI(_cid, _csec)
     access_token = kroger_api.request_token()
 
     if access_token:

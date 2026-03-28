@@ -4,10 +4,8 @@ import os
 from flask import Flask, request, redirect
 
 # -----------------------------------------------------------------------
-# 1) Your Kroger Dev Portal credentials for PRODUCTION environment
+# Kroger Dev Portal credentials: use environment variables only (never commit secrets).
 # -----------------------------------------------------------------------
-#CLIENT_ID = "nutrifai-243261243034242e644175722e4a4c397a4e507a454732506e594e366576617532756c356b4741754c48746c31634a59564b784d4f2e364e7743462e3423701595089688646"
-#CLIENT_SECRET = "f8IG7k0gYTJZNfHM9a22vaP0_ytGIYng2Acr9mIu"
 CLIENT_ID = os.getenv("KROGER_CLIENT_ID")
 CLIENT_SECRET = os.getenv("KROGER_CLIENT_SECRET")
 REDIRECT_URI = "https://grubify.onrender.com/callback"

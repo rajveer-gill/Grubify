@@ -41,6 +41,7 @@ class Database:
         '''
         self.crsr.execute(sql_command, (recipe_json,))
         self.connection.commit()
+        return self.crsr.lastrowid
 
     def get_recipe_by_id(self, recipe_id):
         """
@@ -60,13 +61,11 @@ class Database:
         """
         Get all recipes in the database.
         """
-        print("entering get all")
         sql_command = 'SELECT * FROM recipes;'
         self.crsr.execute(sql_command)
         recipes = self.crsr.fetchall()  # Returns a list of tuples (id, recipe_data)
-        print(recipes[0])
-        
-        # Deserialize the recipe data for each recipe
+        if not recipes:
+            return []
         return [json.loads(r[1]) for r in recipes]
 
     def delete_recipe(self, recipe_id):

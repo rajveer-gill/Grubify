@@ -14,7 +14,10 @@ import os
 load_dotenv()
 
 app = Flask(__name__)
-app.secret_key = "some-secret-key"  # Required for session management
+_flask_secret = os.environ.get("FLASK_SECRET_KEY", "").strip()
+if not _flask_secret and os.environ.get("RENDER"):
+    raise RuntimeError("FLASK_SECRET_KEY must be set on Render (use a long random string).")
+app.secret_key = _flask_secret or "dev-only-not-for-production"
 SPOONACULAR_API_KEY = os.environ.get('SPOONACULAR_API_KEY')
 
 # Enable CORS (allow credentials) on every route
@@ -170,8 +173,7 @@ def generate_recipe():
 @app.route("/save-recipe", methods=["POST"])
 def save_recipe():
     data = request.json
-    print(data)
-    
+
     if not data or 'recipe' not in data:
         return jsonify({
             'success': False,
@@ -189,9 +191,7 @@ def save_recipe():
     
     try:
         db = Database()
-        
-        db.insert_recipe(data)
-        
+        recipe_id = db.insert_recipe(data)
         return jsonify({
             'success': True,
             'message': 'Recipe saved successfully',
@@ -230,7 +230,6 @@ def fetch_prices():
 def add_to_cart_route():
     user_token = session.get("kroger_user_token")
     if not user_token:
-        print("No token found in session")  # Debugging
         return jsonify({"success": False, "error": "User not logged in to Kroger"}), 401
 
     data = request.json
@@ -258,30 +257,19 @@ def add_to_cart_route():
     success_list = []
 
     for ingredient in ingredients:
-        print(f"📦 Searching for: {ingredient}")
         products = kroger_api.search_products(ingredient, location_id=store_id)
 
         if not products:
-            print(f"⚠️ No products found for {ingredient}")
-            missing_items.append(ingredient)
             success_list.append(False)
             continue
 
-        if not products:
-            print(f"No products found for {ingredient}")
-            success_list.append(False)
-            continue
-        
-        # Pick the first matching product
-        first_product = min(products.values(), key=lambda x: x.get("Price", float('inf')))
-          # take the first result
+        first_product = min(products.values(), key=lambda x: x.get("Price", float("inf")))
         upc = first_product.get("UPC")
         
         if upc:
             success = add_item_to_cart(user_token, upc, quantity=1, modality="PICKUP")
             success_list.append(success)
         else:
-            print(f"No UPC found for {ingredient}")
             success_list.append(False)
 
 

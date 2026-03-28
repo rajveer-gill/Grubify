@@ -64,7 +64,9 @@ const NutrifyAI = () => {
   
     const fetchSuggestions = async () => {
       try {
-        const res = await fetch(`https://www.themealdb.com/api/json/v1/1/search.php?s=${inputValue}`);
+        const res = await fetch(
+          `https://www.themealdb.com/api/json/v1/1/search.php?s=${encodeURIComponent(inputValue)}`
+        );
         const data = await res.json();
         if (data.meals) {
           const suggestions = data.meals.map((meal) => meal.strMeal);
@@ -93,11 +95,18 @@ const NutrifyAI = () => {
 
   const getKrogerToken = async () => {
     try {
+      const firebaseUser = auth.currentUser;
+      if (!firebaseUser) {
+        return null;
+      }
+      const idToken = await firebaseUser.getIdToken();
       const res = await fetch("https://us-central1-grubify-9cf13.cloudfunctions.net/krogerAuthToken", {
         method: "POST",
+        headers: {
+          Authorization: `Bearer ${idToken}`,
+        },
       });
       const data = await res.json();
-      console.log("Kroger token:", data.accessToken);
       return data.accessToken;
     } catch (err) {
       console.error("Failed to fetch Kroger token:", err);
@@ -325,16 +334,15 @@ const NutrifyAI = () => {
     if (authSuccess === "true") {
       // mark UI as logged‑in…
       setKrogerSignInAuthed(true);
-      console.log("User authenticated successfully via callback.");
-      // …and grab/store the user‑level token
       fetch("https://grubify.onrender.com/token", {
         method: "GET",
-        credentials: "include"  // ← send the session cookie
+        credentials: "include"
       })
         .then(res => res.json())
         .then(d => {
-          localStorage.setItem("kroger_user_token", d.user_token);
-          console.log("🔑 Stored Kroger user token");
+          if (d.user_token) {
+            localStorage.setItem("kroger_user_token", d.user_token);
+          }
         })
         .catch(err => console.error("token fetch failed:", err));
     }
@@ -727,8 +735,8 @@ const NutrifyAI = () => {
     setCartStatus('adding'); // Show "adding" overlay
   
     try {
-      const result = addItemsToCart(confirmedIngredients, 'kroger');
-  
+      const result = await addItemsToCart(confirmedIngredients, 'kroger');
+
       if (result.success) {
         setCartStatus('success');
       } else {
