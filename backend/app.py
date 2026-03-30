@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify, redirect, session
 from flask_cors import CORS, cross_origin
 from recipe_handler import fetch_recipe
+from kroger_website_search import search_upc_via_kroger_website
 from store_handler import fetch_ingredient_prices
 from user import exchange_code_for_token, add_item_to_cart
 from dotenv import load_dotenv
@@ -113,21 +114,6 @@ def estimate_grams_from_text(ingredient_text):
         if unit_name in UNIT_TO_GRAMS:
             return value * UNIT_TO_GRAMS[unit_name]
 
-    return None
-
-def extract_upc_from_kroger_product(product):
-    """First UPC from a Kroger product object (matches JS / prior Cloud Function logic)."""
-    if not product or not isinstance(product, dict):
-        return None
-    direct = product.get("upc") or product.get("UPC")
-    if direct is not None and str(direct).strip():
-        return str(direct)
-    items = product.get("items") or []
-    if items and isinstance(items[0], dict):
-        it = items[0]
-        u = it.get("upc") or it.get("UPC")
-        if u is not None and str(u).strip():
-            return str(u)
     return None
 
 
@@ -261,8 +247,11 @@ def fetch_prices():
 @app.route("/kroger/search-upcs", methods=["POST"])
 def kroger_search_upcs():
     """
-    Resolve ingredient names to Kroger UPCs using the user's Kroger OAuth token.
-    Called from the browser via Render (Kroger API blocks browser CORS and GCP; Render works).
+    Resolve ingredient names to Kroger UPCs via www.kroger.com search HTML.
+
+    api.kroger.com/v1/products is blocked from cloud datacenter IPs (Akamai).
+    The consumer site is a different origin and is fetched server-side from Render.
+    kroger_token is still required so only clients that completed Kroger OAuth call this.
     """
     data = request.get_json(silent=True) or {}
     items = data.get("items", [])
@@ -281,44 +270,21 @@ def kroger_search_upcs():
         if not term:
             failed_items.append({"item": raw, "reason": "empty_term"})
             continue
-        try:
-            r = requests.get(
-                "https://api.kroger.com/v1/products",
-                params={"filter.term": term, "filter.limit": "1"},
-                headers={
-                    "Authorization": f"Bearer {kroger_token}",
-                    "Accept": "application/json",
-                    "Accept-Language": "en-US,en;q=0.9",
-                    "Accept-Encoding": "gzip, deflate, br",
-                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                    "Connection": "keep-alive",
-                    "Cache-Control": "no-cache",
-                },
-                timeout=30,
-            )
-            print(f"[search-upcs] Kroger product search '{term}': HTTP {r.status_code}")
-        except requests.RequestException as e:
-            failed_items.append({"item": term, "reason": "request_error", "detail": str(e)[:200]})
+
+        upc, http_status, detail = search_upc_via_kroger_website(term)
+
+        if detail.startswith("request_error"):
+            failed_items.append({"item": term, "reason": "request_error", "detail": detail})
             continue
-        if r.status_code != 200:
-            failed_items.append(
-                {
-                    "item": term,
-                    "reason": "product_search_failed",
-                    "krogerStatus": r.status_code,
-                }
-            )
-            continue
-        try:
-            payload = r.json()
-        except ValueError:
-            failed_items.append({"item": term, "reason": "invalid_json"})
-            continue
-        products = payload.get("data") or []
-        product = products[0] if products else None
-        upc = extract_upc_from_kroger_product(product)
         if not upc:
-            failed_items.append({"item": term, "reason": "no_upc"})
+            entry = {
+                "item": term,
+                "reason": "no_upc" if detail == "no_upc_in_page" else "product_search_failed",
+                "detail": detail,
+            }
+            if http_status:
+                entry["krogerStatus"] = http_status
+            failed_items.append(entry)
             continue
         if upc not in seen:
             seen.add(upc)
