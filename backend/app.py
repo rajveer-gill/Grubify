@@ -284,10 +284,19 @@ def kroger_search_upcs():
         try:
             r = requests.get(
                 "https://api.kroger.com/v1/products",
-                params={"filter.term": term},
-                headers={"Authorization": f"Bearer {kroger_token}"},
+                params={"filter.term": term, "filter.limit": "1"},
+                headers={
+                    "Authorization": f"Bearer {kroger_token}",
+                    "Accept": "application/json",
+                    "Accept-Language": "en-US,en;q=0.9",
+                    "Accept-Encoding": "gzip, deflate, br",
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                    "Connection": "keep-alive",
+                    "Cache-Control": "no-cache",
+                },
                 timeout=30,
             )
+            print(f"[search-upcs] Kroger product search '{term}': HTTP {r.status_code}")
         except requests.RequestException as e:
             failed_items.append({"item": term, "reason": "request_error", "detail": str(e)[:200]})
             continue
