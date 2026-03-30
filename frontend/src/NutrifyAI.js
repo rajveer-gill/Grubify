@@ -38,19 +38,42 @@ function logD(...args) {
   if (grubifyDebug()) console.log("[Grubify]", ...args);
 }
 
-// #region agent log
-function __dbgIngest(payload) {
-  fetch("http://127.0.0.1:7552/ingest/b4ed0833-2047-432b-9012-57f78d8f1d87", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "d69c08" },
-    body: JSON.stringify({
-      sessionId: "d69c08",
-      timestamp: Date.now(),
-      ...payload,
-    }),
-  }).catch(() => {});
+/** Match Kroger product JSON shape (same logic as Cloud Function used to use). */
+function extractUpcFromKrogerProduct(product) {
+  if (!product || typeof product !== "object") return null;
+  const direct = product.upc ?? product.UPC;
+  if (direct != null && String(direct).trim() !== "") return String(direct);
+  const items = product.items;
+  if (Array.isArray(items) && items.length) {
+    const it = items[0];
+    if (it && typeof it === "object") {
+      const u = it.upc ?? it.UPC;
+      if (u != null && String(u).trim() !== "") return String(u);
+    }
+  }
+  return null;
 }
-// #endregion
+
+/** Browser-side Kroger product search (Akamai blocks server-side). */
+async function fetchKrogerUpcForTerm(term, userToken) {
+  const url = `https://api.kroger.com/v1/products?filter.term=${encodeURIComponent(term)}`;
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${userToken}` },
+  });
+  if (!res.ok) {
+    return { ok: false, reason: "product_search_failed", status: res.status, term };
+  }
+  let data;
+  try {
+    data = await res.json();
+  } catch {
+    return { ok: false, reason: "invalid_json", term };
+  }
+  const product = data?.data?.[0];
+  const upc = extractUpcFromKrogerProduct(product);
+  if (!upc) return { ok: false, reason: "no_upc", term };
+  return { ok: true, upc, term };
+}
 
 
 const NutrifyAI = () => {
@@ -527,9 +550,8 @@ const NutrifyAI = () => {
     }
   };
   
-  // Function to add items to cart (include Kroger user token)
+  // Function to add items to cart: resolve UPCs in the browser (Kroger blocks server-side search), then Cloud Function cart PUT only.
   const addItemsToCart = async (items) => {
-    // grab the logged-in Kroger token (set by your OAuth callback)
     const userToken = localStorage.getItem("kroger_user_token");
     if (!userToken) {
       toast.error("🔐 Please log in to Kroger first.");
@@ -537,26 +559,42 @@ const NutrifyAI = () => {
     }
 
     try {
-      if (!sessionStorage.getItem("grubify_cart_client_v2")) {
-        sessionStorage.setItem("grubify_cart_client_v2", "1");
-        console.info(
-          "[Grubify] Kroger cart: using text()+JSON.parse (not response.json). If you still see json() errors, hard-refresh or redeploy Hosting."
-        );
+      const failedItems = [];
+      const upcsOrdered = [];
+      const seenUpc = new Set();
+
+      for (const raw of items) {
+        const term =
+          typeof raw === "string" ? raw.trim() : String(raw?.name ?? raw ?? "").trim();
+        if (!term) {
+          failedItems.push({ item: raw, reason: "empty_term" });
+          continue;
+        }
+        const found = await fetchKrogerUpcForTerm(term, userToken);
+        if (!found.ok) {
+          failedItems.push({
+            item: term,
+            reason: found.reason,
+            ...(found.status != null ? { krogerStatus: found.status } : {}),
+          });
+          continue;
+        }
+        if (!seenUpc.has(found.upc)) {
+          seenUpc.add(found.upc);
+          upcsOrdered.push(found.upc);
+        }
       }
-      logD("addToKrogerCart request", { count: items.length, items: items.slice(0, 8) });
-      // #region agent log
-      __dbgIngest({
-        location: "NutrifyAI.js:addItemsToCart:preFetch",
-        message: "addToKrogerCart request shape",
-        hypothesisId: "H1",
-        runId: "cart-debug-1",
-        data: {
-          itemCount: items.length,
-          itemNamesSample: Array.isArray(items) ? items.slice(0, 6) : String(items),
-          hasKrogerUserToken: Boolean(userToken && userToken.length > 10),
-        },
+
+      logD("Kroger UPC resolution", {
+        resolved: upcsOrdered.length,
+        failed: failedItems.length,
       });
-      // #endregion
+
+      if (upcsOrdered.length === 0) {
+        toast.error("❌ No Kroger products matched your ingredients. Try simpler names.");
+        return { success: false, failedItems };
+      }
+
       const res = await fetch(
         "https://us-central1-grubify-9cf13.cloudfunctions.net/addToKrogerCart",
         {
@@ -565,9 +603,7 @@ const NutrifyAI = () => {
             "Content-Type": "application/json",
             Authorization: `Bearer ${userToken}`,
           },
-          body: JSON.stringify({
-            items: items   // send ["avocado","kale",…], not full objects
-          }),
+          body: JSON.stringify({ upcs: upcsOrdered }),
         }
       );
       const raw = await res.text();
@@ -575,32 +611,7 @@ const NutrifyAI = () => {
         status: res.status,
         ok: res.ok,
         bodyLength: raw?.length ?? 0,
-        bodyPreview: raw?.length ? raw.slice(0, 200) : "(empty)",
       });
-      // #region agent log
-      let parsedSafe = null;
-      try {
-        parsedSafe = raw?.trim() ? JSON.parse(raw) : null;
-      } catch {
-        parsedSafe = { _parseError: true };
-      }
-      __dbgIngest({
-        location: "NutrifyAI.js:addItemsToCart:postResponse",
-        message: "addToKrogerCart HTTP response",
-        hypothesisId: "H2-H3-H4-H5",
-        runId: "cart-debug-1",
-        data: {
-          status: res.status,
-          ok: res.ok,
-          bodyLength: raw?.length ?? 0,
-          bodyPreview: (raw && raw.slice(0, 1500)) || "",
-          parsedKeys: parsedSafe && typeof parsedSafe === "object" ? Object.keys(parsedSafe) : [],
-          parsedError: parsedSafe?.error,
-          parsedKrogerStatus: parsedSafe?.krogerStatus,
-          parsedDetailType: typeof parsedSafe?.detail,
-        },
-      });
-      // #endregion
       let data = {};
       if (raw.trim()) {
         try {
@@ -609,29 +620,23 @@ const NutrifyAI = () => {
           logD("addToKrogerCart JSON parse error", parseErr?.message);
           data = { error: "Invalid response from cart service" };
         }
-      } else if (res.ok) {
-        logD("addToKrogerCart: OK but empty body (unexpected after server fix)");
       }
       if (!res.ok) {
-        logD("addToKrogerCart failed payload", data);
         toast.error(`❌ ${data.error || res.statusText || "Could not add to cart"}`);
-        return { success: false };
+        return { success: false, failedItems: data.failedItems ?? failedItems };
       }
-      logD("addToKrogerCart success", data);
-      toast.success("✅ Added to Kroger cart!");
-      return { success: true };
+      const added = data.addedCount ?? upcsOrdered.length;
+      if (failedItems.length > 0) {
+        toast.success(
+          `✅ Added ${added} item(s) to Kroger cart. ${failedItems.length} ingredient(s) could not be matched.`
+        );
+      } else {
+        toast.success("✅ Added to Kroger cart!");
+      }
+      return { success: true, addedCount: added, failedItems: data.failedItems ?? failedItems };
     } catch (err) {
       console.error("addItemsToCart error:", err);
       logD("addToKrogerCart network/exception", err?.message, err?.name);
-      // #region agent log
-      __dbgIngest({
-        location: "NutrifyAI.js:addItemsToCart:catch",
-        message: "addToKrogerCart exception",
-        hypothesisId: "H5",
-        runId: "cart-debug-1",
-        data: { name: err?.name, message: err?.message },
-      });
-      // #endregion
       toast.error("❌ Network error, try again.");
       return { success: false };
     }

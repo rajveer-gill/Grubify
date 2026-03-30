@@ -64,21 +64,6 @@ function getJsonBody(req) {
   return {};
 }
 
-function extractUpcFromKrogerProduct(product) {
-  if (!product || typeof product !== "object") return null;
-  const direct = product.upc ?? product.UPC;
-  if (direct != null && String(direct).trim() !== "") return String(direct);
-  const items = product.items;
-  if (Array.isArray(items) && items.length) {
-    const it = items[0];
-    if (it && typeof it === "object") {
-      const u = it.upc ?? it.UPC;
-      if (u != null && String(u).trim() !== "") return String(u);
-    }
-  }
-  return null;
-}
-
 exports.generateRecipe = onRequest({ secrets: [openaiKey] }, async (req, res) => {
     cors(req, res, async () => {
       if (req.method === "OPTIONS") {
@@ -190,68 +175,31 @@ exports.generateRecipe = onRequest({ secrets: [openaiKey] }, async (req, res) =>
         }
 
         const body = getJsonBody(req);
-        const items = body.items;
+        const rawUpcs = body.upcs;
         console.log("[addToKrogerCart] POST", {
-          itemCount: Array.isArray(items) ? items.length : 0,
+          upcCount: Array.isArray(rawUpcs) ? rawUpcs.length : 0,
           hasAuth: true,
           contentType: req.headers["content-type"],
           hasParsedBody: Object.keys(body).length > 0,
           rawBodyLen: req.rawBody ? req.rawBody.length : 0,
         });
-        if (!items || !Array.isArray(items) || items.length === 0) {
-          console.warn("[addToKrogerCart] bad items payload");
-          return res.status(400).json({ error: "No items provided" });
+        if (!rawUpcs || !Array.isArray(rawUpcs) || rawUpcs.length === 0) {
+          console.warn("[addToKrogerCart] bad upcs payload");
+          return res.status(400).json({ error: "No UPCs provided (expected body.upcs)" });
         }
 
-        const failedItems = [];
-        const upcsOrdered = [];
         const seenUpc = new Set();
-
-        for (const raw of items) {
-          const term = typeof raw === "string" ? raw : String(raw?.name ?? raw ?? "");
-          if (!term.trim()) {
-            failedItems.push({ item: raw, reason: "empty_term" });
-            continue;
-          }
-
-          const searchRes = await axios.get(
-            `https://api.kroger.com/v1/products?filter.term=${encodeURIComponent(term)}`,
-            {
-              headers: {
-                Authorization: `Bearer ${userToken}`,
-              },
-              validateStatus: () => true,
-            }
-          );
-
-          if (searchRes.status !== 200) {
-            failedItems.push({
-              item: term,
-              reason: "product_search_failed",
-              krogerStatus: searchRes.status,
-            });
-            continue;
-          }
-
-          const product = searchRes.data?.data?.[0];
-          const upc = extractUpcFromKrogerProduct(product);
-          if (!upc) {
-            failedItems.push({ item: term, reason: "no_upc" });
-            continue;
-          }
-
-          if (!seenUpc.has(upc)) {
-            seenUpc.add(upc);
-            upcsOrdered.push(upc);
+        const upcsOrdered = [];
+        for (const u of rawUpcs) {
+          const s = String(u ?? "").trim();
+          if (!s) continue;
+          if (!seenUpc.has(s)) {
+            seenUpc.add(s);
+            upcsOrdered.push(s);
           }
         }
-
         if (upcsOrdered.length === 0) {
-          return res.status(200).json({
-            success: true,
-            addedCount: 0,
-            failedItems,
-          });
+          return res.status(400).json({ error: "No valid UPC strings in body.upcs" });
         }
 
         const addRes = await axios.put(
@@ -273,12 +221,11 @@ exports.generateRecipe = onRequest({ secrets: [openaiKey] }, async (req, res) =>
           console.log("[addToKrogerCart] cart/add OK", {
             krogerStatus: addRes.status,
             addedCount: upcsOrdered.length,
-            failedCount: failedItems.length,
           });
           return res.status(200).json({
             success: true,
             addedCount: upcsOrdered.length,
-            failedItems,
+            failedItems: [],
           });
         }
 
@@ -290,13 +237,13 @@ exports.generateRecipe = onRequest({ secrets: [openaiKey] }, async (req, res) =>
         if (addRes.status === 401 || addRes.status === 403) {
           return res.status(401).json({
             error: "Kroger rejected the cart request — sign out of Kroger in the app and connect again.",
-            failedItems,
+            failedItems: [],
           });
         }
         return res.status(502).json({
           error: "Failed to add to cart",
           krogerStatus: addRes.status,
-          failedItems,
+          failedItems: [],
           detail: typeof detail === "string" ? detail.slice(0, 500) : detail,
         });
       } catch (err) {
