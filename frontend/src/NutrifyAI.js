@@ -40,10 +40,16 @@ function logD(...args) {
 
 /** Kroger product search via Flask on Render (browser/GCP cannot call api.kroger.com reliably). */
 async function fetchKrogerSearchUpcsViaRender(items, krogerToken) {
+  const token = (krogerToken != null && String(krogerToken).trim()) || "";
+  if (!token) {
+    throw new Error(
+      "No Kroger token available — use Login with Kroger in the sidebar and complete sign-in."
+    );
+  }
   const res = await fetch("https://grubify.onrender.com/kroger/search-upcs", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ items, kroger_token: krogerToken }),
+    body: JSON.stringify({ items, kroger_token: token }),
   });
   const raw = await res.text();
   let data = {};
@@ -347,10 +353,21 @@ const NutrifyAI = () => {
     return urlParams.get(param);
   };
 
+  /** After hard refresh: restore Kroger UI from persisted token */
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem("kroger_user_token");
+      if (stored && String(stored).trim()) {
+        setKrogerSignInAuthed(true);
+      }
+    } catch (e) {
+      console.warn("[Grubify] could not read kroger_user_token from localStorage", e);
+    }
+  }, []);
+
   useEffect(() => {
     const authSuccess = getQueryParam("authSuccess");
     if (authSuccess === "true") {
-      // mark UI as logged‑in…
       setKrogerSignInAuthed(true);
       fetch("https://grubify.onrender.com/token", {
         method: "GET",
@@ -373,8 +390,10 @@ const NutrifyAI = () => {
             return;
           }
           if (d.user_token) {
-            localStorage.setItem("kroger_user_token", d.user_token);
-            logD("Kroger user token stored, length", d.user_token.length);
+            const v = String(d.user_token).trim();
+            localStorage.setItem("kroger_user_token", v);
+            setKrogerSignInAuthed(true);
+            logD("Kroger user token stored, length", v.length);
           } else {
             logD("Kroger callback /token no user_token in JSON", Object.keys(d));
           }
@@ -541,9 +560,20 @@ const NutrifyAI = () => {
   
   // Function to add items to cart: resolve UPCs via Render (Flask), then Cloud Function cart PUT only.
   const addItemsToCart = async (items) => {
-    const userToken = localStorage.getItem("kroger_user_token");
+    const rawStored = localStorage.getItem("kroger_user_token");
+    const userToken = rawStored ? String(rawStored).trim() : "";
+    const tokenPreview =
+      userToken.length > 12
+        ? `${userToken.slice(0, 6)}…${userToken.slice(-4)} (len=${userToken.length})`
+        : userToken
+          ? `(short token, len=${userToken.length})`
+          : "(none)";
+    console.log("[Grubify] addItemsToCart kroger token:", tokenPreview);
+
     if (!userToken) {
-      toast.error("🔐 Please log in to Kroger first.");
+      toast.error(
+        "🔐 Login with Kroger — no saved token after refresh. Use the sidebar button and complete sign-in."
+      );
       return { success: false };
     }
 
@@ -626,7 +656,12 @@ const NutrifyAI = () => {
     } catch (err) {
       console.error("addItemsToCart error:", err);
       logD("addToKrogerCart network/exception", err?.message, err?.name);
-      toast.error("❌ Network error, try again.");
+      const m =
+        err?.message ||
+        (err?.name === "TypeError" && String(err).includes("fetch")
+          ? "Could not reach Grubify (network or CORS). Check connection."
+          : "Network error — try again.");
+      toast.error(`❌ ${m}`);
       return { success: false };
     }
   };
