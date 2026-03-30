@@ -42,6 +42,43 @@ async function requireFirebaseUser(req) {
   return admin.auth().verifyIdToken(idToken);
 }
 
+/** Gen2 / Cloud Run may not populate req.body; rawBody holds JSON bytes. */
+function getJsonBody(req) {
+  if (req.body && typeof req.body === "object" && !Buffer.isBuffer(req.body)) {
+    return req.body;
+  }
+  if (req.rawBody && Buffer.isBuffer(req.rawBody) && req.rawBody.length) {
+    try {
+      return JSON.parse(req.rawBody.toString("utf8"));
+    } catch (e) {
+      console.warn("[getJsonBody] rawBody JSON parse failed", e.message);
+    }
+  }
+  if (typeof req.body === "string" && req.body.trim()) {
+    try {
+      return JSON.parse(req.body);
+    } catch (e) {
+      /* ignore */
+    }
+  }
+  return {};
+}
+
+function extractUpcFromKrogerProduct(product) {
+  if (!product || typeof product !== "object") return null;
+  const direct = product.upc ?? product.UPC;
+  if (direct != null && String(direct).trim() !== "") return String(direct);
+  const items = product.items;
+  if (Array.isArray(items) && items.length) {
+    const it = items[0];
+    if (it && typeof it === "object") {
+      const u = it.upc ?? it.UPC;
+      if (u != null && String(u).trim() !== "") return String(u);
+    }
+  }
+  return null;
+}
+
 exports.generateRecipe = onRequest({ secrets: [openaiKey] }, async (req, res) => {
     cors(req, res, async () => {
       if (req.method === "OPTIONS") {
@@ -146,12 +183,15 @@ exports.generateRecipe = onRequest({ secrets: [openaiKey] }, async (req, res) =>
         return res.status(204).send('');
       }
       
-      try {  
-        const items = req.body.items;
+      try {
+        const body = getJsonBody(req);
+        const items = body.items;
         console.log("[addToKrogerCart] POST", {
           itemCount: Array.isArray(items) ? items.length : 0,
           hasAuth: Boolean(req.headers.authorization),
           contentType: req.headers["content-type"],
+          hasParsedBody: Object.keys(body).length > 0,
+          rawBodyLen: req.rawBody ? req.rawBody.length : 0,
         });
         if (!items || !Array.isArray(items) || items.length === 0) {
           console.warn("[addToKrogerCart] bad items payload");
@@ -208,13 +248,19 @@ exports.generateRecipe = onRequest({ secrets: [openaiKey] }, async (req, res) =>
           }
         );
 
-        // extract UPC from the first matching product
-        const product = sampleRes.data.data && sampleRes.data.data[0];
-        const { upc } = product || {};
-        
+        const product = sampleRes.data?.data?.[0];
+        const upc = extractUpcFromKrogerProduct(product);
+
         if (!upc) {
-          console.warn("[addToKrogerCart] no UPC", { firstTerm: String(items[0]).slice(0, 80) });
-          throw new Error("No UPC found for product");
+          console.warn("[addToKrogerCart] no UPC", {
+            firstTerm: String(items[0]).slice(0, 80),
+            dataLength: sampleRes.data?.data?.length ?? 0,
+            productKeys: product ? Object.keys(product) : [],
+          });
+          return res.status(422).json({
+            error: "No Kroger product match (no UPC) for this ingredient. Try a simpler name.",
+            term: String(items[0]).slice(0, 120),
+          });
         }
 
         const authHeader = req.headers.authorization;
@@ -246,12 +292,22 @@ exports.generateRecipe = onRequest({ secrets: [openaiKey] }, async (req, res) =>
           console.log("[addToKrogerCart] Kroger cart/add OK", { krogerStatus: addRes.status });
           return res.status(200).json({ success: true, krogerStatus: addRes.status });
         } catch (err) {
+          const st = err.response?.status;
           const detail = err.response?.data ?? err.message;
           console.error("[addToKrogerCart] Kroger cart/add failed", {
-            status: err.response?.status,
+            status: st,
             detail: typeof detail === "object" ? JSON.stringify(detail) : detail,
           });
-          return res.status(500).json({ error: "Failed to add to cart" });
+          if (st === 401 || st === 403) {
+            return res.status(401).json({
+              error: "Kroger rejected the cart request — sign out of Kroger in the app and connect again.",
+            });
+          }
+          return res.status(500).json({
+            error: "Failed to add to cart",
+            krogerStatus: st,
+            detail: typeof detail === "string" ? detail.slice(0, 500) : detail,
+          });
         }
       } catch (err) {
         const detail = err.response?.data ?? err.message;
