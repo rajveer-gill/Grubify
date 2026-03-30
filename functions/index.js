@@ -8,8 +8,19 @@ if (!admin.apps.length) {
   admin.initializeApp();
 }
 
+const ALLOWED_ORIGINS = [
+  "https://grubify.ai",
+  "https://grubify-9cf13.firebaseapp.com",
+  "https://grubify-9cf13.web.app",
+];
+
 const cors = require("cors")({
-  origin: ["https://grubify.ai", "https://grubify-9cf13.firebaseapp.com", "https://grubify-9cf13.web.app"],
+  origin: (origin, cb) => {
+    if (!origin || ALLOWED_ORIGINS.includes(origin)) {
+      return cb(null, true);
+    }
+    return cb(null, false);
+  },
   methods: ["POST", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],
   credentials: true,
@@ -222,7 +233,8 @@ exports.generateRecipe = onRequest({ secrets: [openaiKey] }, async (req, res) =>
             { headers: { Authorization: `Bearer ${userToken}` } }
           );
 
-          return res.status(addRes.status).json({ success: true });
+          // Kroger often returns 204 No Content; browsers must not get 204 + JSON body mismatch.
+          return res.status(200).json({ success: true, krogerStatus: addRes.status });
         } catch (err) {
           console.error("🔥 Kroger add-to-cart failed:", err.response?.data || err.message);
           return res.status(500).json({ error: "Failed to add to cart" });

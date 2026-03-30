@@ -576,9 +576,17 @@ const NutrifyAI = () => {
           }),
         }
       );
-      const data = await res.json();
+      const raw = await res.text();
+      let data = {};
+      if (raw.trim()) {
+        try {
+          data = JSON.parse(raw);
+        } catch {
+          data = { error: "Invalid response from cart service" };
+        }
+      }
       if (!res.ok) {
-        toast.error(`❌ ${data.error || "Could not add to cart"}`);
+        toast.error(`❌ ${data.error || res.statusText || "Could not add to cart"}`);
         return { success: false };
       }
       toast.success("✅ Added to Kroger cart!");
