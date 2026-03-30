@@ -175,20 +175,25 @@ exports.generateRecipe = onRequest({ secrets: [openaiKey] }, async (req, res) =>
     });
   });
 
-  exports.addToKrogerCart = onRequest({
-    secrets: [krogerClientId, krogerClientSecret],
-  }, async (req, res) => {
+  exports.addToKrogerCart = onRequest({}, async (req, res) => {
     cors(req, res, async () => {
       if (req.method === "OPTIONS") {
         return res.status(204).send('');
       }
       
       try {
+        const authHeader = req.headers.authorization;
+        const userToken = authHeader?.split(" ")[1];
+        if (!userToken) {
+          console.warn("[addToKrogerCart] missing Bearer user token");
+          return res.status(401).json({ error: "Missing Kroger user token" });
+        }
+
         const body = getJsonBody(req);
         const items = body.items;
         console.log("[addToKrogerCart] POST", {
           itemCount: Array.isArray(items) ? items.length : 0,
-          hasAuth: Boolean(req.headers.authorization),
+          hasAuth: true,
           contentType: req.headers["content-type"],
           hasParsedBody: Object.keys(body).length > 0,
           rawBodyLen: req.rawBody ? req.rawBody.length : 0,
@@ -197,142 +202,103 @@ exports.generateRecipe = onRequest({ secrets: [openaiKey] }, async (req, res) =>
           console.warn("[addToKrogerCart] bad items payload");
           return res.status(400).json({ error: "No items provided" });
         }
-    
-        // Get Kroger access token (axios throws on non-2xx by default → outer catch → generic 500)
-        const tokenRes = await axios.post(
-          "https://api.kroger.com/v1/connect/oauth2/token",
-          new URLSearchParams({
-            grant_type: "client_credentials",
-            scope: "product.compact",
-          }),
-          {
-            auth: {
-              username: krogerClientId.value(),
-              password: krogerClientSecret.value(),
-            },
-            headers: {
-              "Content-Type": "application/x-www-form-urlencoded",
-            },
-            validateStatus: () => true,
+
+        const failedItems = [];
+        const upcsOrdered = [];
+        const seenUpc = new Set();
+
+        for (const raw of items) {
+          const term = typeof raw === "string" ? raw : String(raw?.name ?? raw ?? "");
+          if (!term.trim()) {
+            failedItems.push({ item: raw, reason: "empty_term" });
+            continue;
           }
-        );
-        if (tokenRes.status !== 200 || !tokenRes.data?.access_token) {
-          const d = tokenRes.data;
-          console.error("[addToKrogerCart] Kroger OAuth failed", {
-            status: tokenRes.status,
-            data: typeof d === "object" ? JSON.stringify(d) : d,
-          });
-          return res.status(502).json({
-            error: "Kroger API client credentials failed",
-            krogerStatus: tokenRes.status,
-          });
-        }
-        const accessToken = tokenRes.data.access_token;
-        const results = [];
 
-        for (const item of items) {
-          try {
-            const response = await axios.get(
-              `https://api.kroger.com/v1/products?filter.term=${encodeURIComponent(item)}`,
-              {
-                headers: {
-                  Authorization: `Bearer ${accessToken}`,
-                },
-              }
-            );
-            // extract the first matching product/item
-            const productData = response.data.data?.[0]?.items?.[0];
-            if (!productData) throw new Error("No products found");
-            results.push({ item, productData });
-          } catch (innerError) {
-            console.error(`❌ Error fetching "${item}":`, innerError.response?.data || innerError.message);
-            results.push({ item, error: true });
-          }
-        }
-
-        const sampleRes = await axios.get(
-          `https://api.kroger.com/v1/products?filter.term=${encodeURIComponent(items[0])}`,
-          {
-            headers: {
-              Authorization: `Bearer ${accessToken}`,
-            },
-            validateStatus: () => true,
-          }
-        );
-        if (sampleRes.status !== 200) {
-          const d = sampleRes.data;
-          console.error("[addToKrogerCart] Kroger product search failed", {
-            status: sampleRes.status,
-            term: String(items[0]).slice(0, 80),
-            data: typeof d === "object" ? JSON.stringify(d).slice(0, 500) : d,
-          });
-          return res.status(502).json({
-            error: "Kroger product search failed",
-            krogerStatus: sampleRes.status,
-          });
-        }
-
-        const product = sampleRes.data?.data?.[0];
-        const upc = extractUpcFromKrogerProduct(product);
-
-        if (!upc) {
-          console.warn("[addToKrogerCart] no UPC", {
-            firstTerm: String(items[0]).slice(0, 80),
-            dataLength: sampleRes.data?.data?.length ?? 0,
-            productKeys: product ? Object.keys(product) : [],
-          });
-          return res.status(422).json({
-            error: "No Kroger product match (no UPC) for this ingredient. Try a simpler name.",
-            term: String(items[0]).slice(0, 120),
-          });
-        }
-
-        const authHeader = req.headers.authorization;
-        const userToken = authHeader?.split(" ")[1];
-
-        if (!userToken) {
-          console.warn("[addToKrogerCart] missing Bearer user token");
-          return res.status(401).json({ error: "Missing Kroger user token" });
-        }
-
-        console.log("[addToKrogerCart] cart/add", { upc, failedLookups: results.filter((r) => r.error).length });
-        // actually add the item to the cart, with error logging
-        try {
-          const addRes = await axios.put(
-            "https://api.kroger.com/v1/cart/add",
+          const searchRes = await axios.get(
+            `https://api.kroger.com/v1/products?filter.term=${encodeURIComponent(term)}`,
             {
-              items: [
-                {
-                  upc,
-                  quantity: 1,
-                  modality: "PICKUP",
-                }
-              ]
-            },
-            { headers: { Authorization: `Bearer ${userToken}` } }
+              headers: {
+                Authorization: `Bearer ${userToken}`,
+              },
+              validateStatus: () => true,
+            }
           );
 
-          // Kroger often returns 204 No Content; browsers must not get 204 + JSON body mismatch.
-          console.log("[addToKrogerCart] Kroger cart/add OK", { krogerStatus: addRes.status });
-          return res.status(200).json({ success: true, krogerStatus: addRes.status });
-        } catch (err) {
-          const st = err.response?.status;
-          const detail = err.response?.data ?? err.message;
-          console.error("[addToKrogerCart] Kroger cart/add failed", {
-            status: st,
-            detail: typeof detail === "object" ? JSON.stringify(detail) : detail,
-          });
-          if (st === 401 || st === 403) {
-            return res.status(401).json({
-              error: "Kroger rejected the cart request — sign out of Kroger in the app and connect again.",
+          if (searchRes.status !== 200) {
+            failedItems.push({
+              item: term,
+              reason: "product_search_failed",
+              krogerStatus: searchRes.status,
             });
+            continue;
           }
-          return res.status(500).json({
-            error: "Failed to add to cart",
-            krogerStatus: st,
-            detail: typeof detail === "string" ? detail.slice(0, 500) : detail,
+
+          const product = searchRes.data?.data?.[0];
+          const upc = extractUpcFromKrogerProduct(product);
+          if (!upc) {
+            failedItems.push({ item: term, reason: "no_upc" });
+            continue;
+          }
+
+          if (!seenUpc.has(upc)) {
+            seenUpc.add(upc);
+            upcsOrdered.push(upc);
+          }
+        }
+
+        if (upcsOrdered.length === 0) {
+          return res.status(200).json({
+            success: true,
+            addedCount: 0,
+            failedItems,
           });
         }
+
+        const addRes = await axios.put(
+          "https://api.kroger.com/v1/cart/add",
+          {
+            items: upcsOrdered.map((upc) => ({
+              upc,
+              quantity: 1,
+              modality: "PICKUP",
+            })),
+          },
+          {
+            headers: { Authorization: `Bearer ${userToken}` },
+            validateStatus: () => true,
+          }
+        );
+
+        if (addRes.status === 200 || addRes.status === 204) {
+          console.log("[addToKrogerCart] cart/add OK", {
+            krogerStatus: addRes.status,
+            addedCount: upcsOrdered.length,
+            failedCount: failedItems.length,
+          });
+          return res.status(200).json({
+            success: true,
+            addedCount: upcsOrdered.length,
+            failedItems,
+          });
+        }
+
+        const detail = addRes.data;
+        console.error("[addToKrogerCart] Kroger cart/add failed", {
+          status: addRes.status,
+          detail: typeof detail === "object" ? JSON.stringify(detail) : detail,
+        });
+        if (addRes.status === 401 || addRes.status === 403) {
+          return res.status(401).json({
+            error: "Kroger rejected the cart request — sign out of Kroger in the app and connect again.",
+            failedItems,
+          });
+        }
+        return res.status(502).json({
+          error: "Failed to add to cart",
+          krogerStatus: addRes.status,
+          failedItems,
+          detail: typeof detail === "string" ? detail.slice(0, 500) : detail,
+        });
       } catch (err) {
         const detail = err.response?.data ?? err.message;
         console.error("[addToKrogerCart] unexpected", {
