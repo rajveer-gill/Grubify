@@ -265,26 +265,30 @@ exports.generateRecipe = onRequest({ secrets: [openaiKey] }, async (req, res) =>
           return res.status(400).json({ error: "No UPCs provided (expected body.upcs)" });
         }
 
-        const seenUpc = new Set();
+        const upcCounts = new Map();
         const upcsOrdered = [];
         for (const u of rawUpcs) {
           const s = String(u ?? "").trim();
           if (!s) continue;
-          if (!seenUpc.has(s)) {
-            seenUpc.add(s);
+          if (!upcCounts.has(s)) {
+            upcCounts.set(s, 1);
             upcsOrdered.push(s);
+          } else {
+            upcCounts.set(s, upcCounts.get(s) + 1);
           }
         }
         if (upcsOrdered.length === 0) {
           return res.status(400).json({ error: "No valid UPC strings in body.upcs" });
         }
+        const requestedUnits = Array.from(upcCounts.values()).reduce((a, b) => a + b, 0);
 
         const addRes = await axios.put(
           "https://api.kroger.com/v1/cart/add",
           {
             items: upcsOrdered.map((upc) => ({
               upc,
-              quantity: 1,
+              // Preserve duplicate UPCs as quantity so no selected ingredients are dropped.
+              quantity: upcCounts.get(upc) || 1,
               modality: "PICKUP",
             })),
           },
@@ -297,11 +301,13 @@ exports.generateRecipe = onRequest({ secrets: [openaiKey] }, async (req, res) =>
         if (addRes.status === 200 || addRes.status === 204) {
           console.log("[addToKrogerCart] cart/add OK", {
             krogerStatus: addRes.status,
-            addedCount: upcsOrdered.length,
+            uniqueUpcCount: upcsOrdered.length,
+            addedCount: requestedUnits,
           });
           return res.status(200).json({
             success: true,
-            addedCount: upcsOrdered.length,
+            addedCount: requestedUnits,
+            uniqueUpcCount: upcsOrdered.length,
             failedItems: [],
           });
         }

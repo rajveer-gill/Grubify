@@ -265,7 +265,6 @@ def kroger_search_upcs():
 
     upcs = []
     failed_items = []
-    seen = set()
 
     for raw in items:
         term, label = parse_search_upc_item(raw)
@@ -301,9 +300,9 @@ def kroger_search_upcs():
             continue
         if retried_with:
             print(f"[search-upcs] alternate query matched: '{term}' -> '{retried_with}'")
-        if upc not in seen:
-            seen.add(upc)
-            upcs.append(upc)
+        # Keep one UPC per input ingredient so downstream cart quantities
+        # can reflect how many ingredients mapped to the same product.
+        upcs.append(upc)
 
     return jsonify({"upcs": upcs, "failedItems": failed_items})
 

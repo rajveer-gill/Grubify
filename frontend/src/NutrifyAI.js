@@ -20,7 +20,12 @@ import {
 } from 'lucide-react';
 import './NutrifyAI.css';
 
-Modal.setAppElement('#root');
+if (typeof document !== "undefined") {
+  const rootEl = document.getElementById("root");
+  if (rootEl) {
+    Modal.setAppElement(rootEl);
+  }
+}
 
 /** Enable with ?grubify_debug=1 or localStorage grubify_debug=1 */
 function grubifyDebug() {
