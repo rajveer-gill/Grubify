@@ -9,7 +9,7 @@ if (!admin.apps.length) {
 }
 
 const cors = require("cors")({
-  origin: ["https://grubify.ai"],
+  origin: ["https://grubify.ai", "https://grubify-9cf13.firebaseapp.com", "https://grubify-9cf13.web.app"],
   methods: ["POST", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],
   credentials: true,
