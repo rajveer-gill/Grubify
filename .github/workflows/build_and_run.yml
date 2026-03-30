@@ -27,12 +27,14 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v5.4.0
         with:
-          python-version: '3.x'
+          # 3.x was resolving to 3.13+; pydantic_core/jiter then build from source (needs Rust).
+          python-version: '3.12'
 
       - name: Create Virtual Environment and Install Dependencies
         run: |
           python3 -m venv venv
           source venv/bin/activate
+          python -m pip install --upgrade pip setuptools wheel
           pip install -r backend/requirements.txt
           pip install pytest
 
