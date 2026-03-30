@@ -148,7 +148,13 @@ exports.generateRecipe = onRequest({ secrets: [openaiKey] }, async (req, res) =>
       
       try {  
         const items = req.body.items;
+        console.log("[addToKrogerCart] POST", {
+          itemCount: Array.isArray(items) ? items.length : 0,
+          hasAuth: Boolean(req.headers.authorization),
+          contentType: req.headers["content-type"],
+        });
         if (!items || !Array.isArray(items) || items.length === 0) {
+          console.warn("[addToKrogerCart] bad items payload");
           return res.status(400).json({ error: "No items provided" });
         }
     
@@ -207,6 +213,7 @@ exports.generateRecipe = onRequest({ secrets: [openaiKey] }, async (req, res) =>
         const { upc } = product || {};
         
         if (!upc) {
+          console.warn("[addToKrogerCart] no UPC", { firstTerm: String(items[0]).slice(0, 80) });
           throw new Error("No UPC found for product");
         }
 
@@ -214,9 +221,11 @@ exports.generateRecipe = onRequest({ secrets: [openaiKey] }, async (req, res) =>
         const userToken = authHeader?.split(" ")[1];
 
         if (!userToken) {
+          console.warn("[addToKrogerCart] missing Bearer user token");
           return res.status(401).json({ error: "Missing Kroger user token" });
         }
 
+        console.log("[addToKrogerCart] cart/add", { upc, failedLookups: results.filter((r) => r.error).length });
         // actually add the item to the cart, with error logging
         try {
           const addRes = await axios.put(
@@ -234,13 +243,22 @@ exports.generateRecipe = onRequest({ secrets: [openaiKey] }, async (req, res) =>
           );
 
           // Kroger often returns 204 No Content; browsers must not get 204 + JSON body mismatch.
+          console.log("[addToKrogerCart] Kroger cart/add OK", { krogerStatus: addRes.status });
           return res.status(200).json({ success: true, krogerStatus: addRes.status });
         } catch (err) {
-          console.error("🔥 Kroger add-to-cart failed:", err.response?.data || err.message);
+          const detail = err.response?.data ?? err.message;
+          console.error("[addToKrogerCart] Kroger cart/add failed", {
+            status: err.response?.status,
+            detail: typeof detail === "object" ? JSON.stringify(detail) : detail,
+          });
           return res.status(500).json({ error: "Failed to add to cart" });
         }
       } catch (err) {
-        console.error("⚠️ Error in addToKrogerCart:", err.response?.data || err.message);
+        const detail = err.response?.data ?? err.message;
+        console.error("[addToKrogerCart] unexpected", {
+          message: err.message,
+          detail: typeof detail === "object" ? JSON.stringify(detail) : detail,
+        });
         return res.status(500).json({ error: "Unexpected error in addToKrogerCart" });
       }
   });

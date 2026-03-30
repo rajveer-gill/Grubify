@@ -26,6 +26,21 @@ import './NutrifyAI.css';
 
 Modal.setAppElement('#root');
 
+/** Enable with ?grubify_debug=1 or localStorage grubify_debug=1 */
+function grubifyDebug() {
+  try {
+    return (
+      typeof window !== "undefined" &&
+      (localStorage.getItem("grubify_debug") === "1" ||
+        new URLSearchParams(window.location.search).get("grubify_debug") === "1")
+    );
+  } catch {
+    return false;
+  }
+}
+function logD(...args) {
+  if (grubifyDebug()) console.log("[Grubify]", ...args);
+}
 
 
 const NutrifyAI = () => {
@@ -106,7 +121,19 @@ const NutrifyAI = () => {
           Authorization: `Bearer ${idToken}`,
         },
       });
-      const data = await res.json();
+      logD("krogerAuthToken HTTP", res.status, res.ok);
+      const raw = await res.text();
+      if (!raw.trim()) {
+        logD("krogerAuthToken empty body");
+        return null;
+      }
+      let data;
+      try {
+        data = JSON.parse(raw);
+      } catch (e) {
+        logD("krogerAuthToken JSON parse error", e?.message);
+        return null;
+      }
       return data.accessToken;
     } catch (err) {
       console.error("Failed to fetch Kroger token:", err);
@@ -338,10 +365,27 @@ const NutrifyAI = () => {
         method: "GET",
         credentials: "include"
       })
-        .then(res => res.json())
-        .then(d => {
+        .then((res) => {
+          logD("Kroger callback /token", res.status, res.ok);
+          return res.text().then((t) => ({ res, t }));
+        })
+        .then(({ res, t }) => {
+          if (!t?.trim()) {
+            logD("Kroger callback /token empty body", res.status);
+            return;
+          }
+          let d;
+          try {
+            d = JSON.parse(t);
+          } catch (e) {
+            console.error("token JSON parse failed:", e);
+            return;
+          }
           if (d.user_token) {
             localStorage.setItem("kroger_user_token", d.user_token);
+            logD("Kroger user token stored, length", d.user_token.length);
+          } else {
+            logD("Kroger callback /token no user_token in JSON", Object.keys(d));
           }
         })
         .catch(err => console.error("token fetch failed:", err));
@@ -485,8 +529,11 @@ const NutrifyAI = () => {
         },
         body: JSON.stringify({ description }),
       });
+      logD("generateRecipe HTTP", response.status, response.ok);
   
       if (!response.ok) {
+        const errText = await response.text().catch(() => "");
+        logD("generateRecipe error body length", errText?.length ?? 0);
         throw new Error('Failed to fetch recipe');
       }
   
@@ -563,6 +610,7 @@ const NutrifyAI = () => {
     }
 
     try {
+      logD("addToKrogerCart request", { count: items.length, items: items.slice(0, 8) });
       const res = await fetch(
         "https://us-central1-grubify-9cf13.cloudfunctions.net/addToKrogerCart",
         {
@@ -577,22 +625,34 @@ const NutrifyAI = () => {
         }
       );
       const raw = await res.text();
+      logD("addToKrogerCart response", {
+        status: res.status,
+        ok: res.ok,
+        bodyLength: raw?.length ?? 0,
+        bodyPreview: raw?.length ? raw.slice(0, 200) : "(empty)",
+      });
       let data = {};
       if (raw.trim()) {
         try {
           data = JSON.parse(raw);
-        } catch {
+        } catch (parseErr) {
+          logD("addToKrogerCart JSON parse error", parseErr?.message);
           data = { error: "Invalid response from cart service" };
         }
+      } else if (res.ok) {
+        logD("addToKrogerCart: OK but empty body (unexpected after server fix)");
       }
       if (!res.ok) {
+        logD("addToKrogerCart failed payload", data);
         toast.error(`❌ ${data.error || res.statusText || "Could not add to cart"}`);
         return { success: false };
       }
+      logD("addToKrogerCart success", data);
       toast.success("✅ Added to Kroger cart!");
       return { success: true };
     } catch (err) {
       console.error("addItemsToCart error:", err);
+      logD("addToKrogerCart network/exception", err?.message, err?.name);
       toast.error("❌ Network error, try again.");
       return { success: false };
     }
