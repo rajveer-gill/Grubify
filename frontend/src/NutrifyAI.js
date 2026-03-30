@@ -610,6 +610,12 @@ const NutrifyAI = () => {
     }
 
     try {
+      if (!sessionStorage.getItem("grubify_cart_client_v2")) {
+        sessionStorage.setItem("grubify_cart_client_v2", "1");
+        console.info(
+          "[Grubify] Kroger cart: using text()+JSON.parse (not response.json). If you still see json() errors, hard-refresh or redeploy Hosting."
+        );
+      }
       logD("addToKrogerCart request", { count: items.length, items: items.slice(0, 8) });
       const res = await fetch(
         "https://us-central1-grubify-9cf13.cloudfunctions.net/addToKrogerCart",
