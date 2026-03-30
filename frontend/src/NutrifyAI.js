@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { auth, provider } from "./firebase";
-import { signInWithPopup, signOut, sendEmailVerification, fetchSignInMethodsForEmail, sendPasswordResetEmail} from "firebase/auth";
+import { signInWithPopup, signOut, sendEmailVerification, sendPasswordResetEmail} from "firebase/auth";
 import { useAuth } from "./hooks/useAuth";
 import Modal from 'react-modal';
 import toast from 'react-hot-toast';
@@ -8,12 +8,8 @@ import { db } from './firebase'; // already good
 import { doc, updateDoc, deleteDoc, collection, addDoc, getDocs, getDocsFromCache } from 'firebase/firestore';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from "firebase/auth";
 import {
-  MessageCircle,
   Compass,
   ChevronDown,
-  ChevronUp,
-  Info,
-  User,
   ShoppingCart,
   ArrowLeft,
   Search,
@@ -47,7 +43,6 @@ const NutrifyAI = () => {
   const [inputValue, setInputValue] = useState('');
   const [currentView, setCurrentView] = useState('input'); // 'input', 'details', or 'pastRecipes'
   const [currentRecipe, setCurrentRecipe] = useState(null);
-  const [profileOpen, setProfileOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [chatInput, setChatInput] = useState('');
@@ -107,39 +102,6 @@ const NutrifyAI = () => {
     }
   }, [user, isModalOpen]);
   
-
-  const getKrogerToken = async () => {
-    try {
-      const firebaseUser = auth.currentUser;
-      if (!firebaseUser) {
-        return null;
-      }
-      const idToken = await firebaseUser.getIdToken();
-      const res = await fetch("https://us-central1-grubify-9cf13.cloudfunctions.net/krogerAuthToken", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${idToken}`,
-        },
-      });
-      logD("krogerAuthToken HTTP", res.status, res.ok);
-      const raw = await res.text();
-      if (!raw.trim()) {
-        logD("krogerAuthToken empty body");
-        return null;
-      }
-      let data;
-      try {
-        data = JSON.parse(raw);
-      } catch (e) {
-        logD("krogerAuthToken JSON parse error", e?.message);
-        return null;
-      }
-      return data.accessToken;
-    } catch (err) {
-      console.error("Failed to fetch Kroger token:", err);
-      return null;
-    }
-  };
 
   const handleToggleAllIngredients = () => {
     const allConfirmed = currentRecipe.ingredients.every(ingredient => ingredient.confirmed);
@@ -220,6 +182,7 @@ const NutrifyAI = () => {
   const handleSaveRecipe = async () => {
     if (!user || !currentRecipe) return;
   
+    setRecipeSaving(true);
     try {
       const recipesRef = collection(db, 'users', user.uid, 'recipes');
       await addDoc(recipesRef, {
@@ -235,6 +198,8 @@ const NutrifyAI = () => {
     } catch (err) {
       console.error("Error saving recipe:", err);
       toast.error("Failed to save recipe.");
+    } finally {
+      setRecipeSaving(false);
     }
   }; 
   
@@ -409,29 +374,8 @@ const NutrifyAI = () => {
   }, []);
 
 
-  // Sample recipe data as fallback
-  const sampleRecipe = {
-    name: "Mediterranean Quinoa Bowl",
-    ingredients: [
-      { name: "Quinoa", amount: "1 cup", inPantry: true },
-      { name: "Cherry Tomatoes", amount: "1 cup, halved", inPantry: false },
-      { name: "Cucumber", amount: "1/2, diced", inPantry: true },
-      { name: "Kalamata Olives", amount: "1/4 cup, sliced", inPantry: false },
-      { name: "Feta Cheese", amount: "1/2 cup, crumbled", inPantry: false },
-      { name: "Olive Oil", amount: "2 tbsp", inPantry: true },
-      { name: "Lemon Juice", amount: "1 tbsp", inPantry: true },
-      { name: "Fresh Mint", amount: "2 tbsp, chopped", inPantry: false }
-    ],
-    instructions: [
-      "Cook quinoa according to package directions and let cool.",
-      "Combine all ingredients in a large bowl.",
-      "Drizzle with olive oil and lemon juice.",
-      "Toss gently to combine and serve."
-    ]
-  };
-
   // NEW Function to fetch past recipes
-  const fetchPastRecipes = async () => {
+  const fetchPastRecipes = useCallback(async () => {
     if (!user) {
       console.warn("User is not defined yet.");
       return;
@@ -498,24 +442,18 @@ const NutrifyAI = () => {
       setPastRecipesLoading(false);
       console.log("Finished loading recipes");
     }
-  };
-  
-  
-  
-  
-  // Fetch past recipes when visiting the Past Recipes view
-  useEffect(() => {
-    if (currentView === 'pastRecipes' && user) {
-      fetchPastRecipes();
-    }
-  }, [currentView, user]);
-  
+  }, [user]);
 
   useEffect(() => {
-    if (user && pastRecipes.length === 0) {
+    if (!user) return;
+    if (currentView === 'pastRecipes') {
+      fetchPastRecipes();
+      return;
+    }
+    if (pastRecipes.length === 0) {
       fetchPastRecipes();
     }
-  }, [user]);
+  }, [currentView, user, pastRecipes.length, fetchPastRecipes]);
   
   
   
@@ -572,31 +510,6 @@ const NutrifyAI = () => {
     } catch (error) {
       console.error('Error modifying recipe:', error);
       throw error;
-    }
-  };
-  
-  // Function to fetch prices for ingredients
-  const fetchIngredientPrices = async (ingredients, store = 'kroger') => {
-    try {
-      const response = await fetch('https://generaterecipe-eyg4dno7ja-uc.a.run.app/fetch-prices', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          ingredients: ingredients.map(ing => ing.name),
-          store
-        }),
-      });
-      
-      if (!response.ok) {
-        throw new Error('Failed to fetch prices');
-      }
-      
-      return await response.json();
-    } catch (error) {
-      console.error('Error fetching prices:', error);
-      return null;
     }
   };
   
@@ -772,14 +685,6 @@ const NutrifyAI = () => {
     } finally {
       setModificationLoading(false);
     }
-  };
-  
-  
-  // Handle removing an ingredient (unused in final UI, but kept here if needed)
-  const handleRemoveIngredient = (indexToRemove) => {
-    const updatedRecipe = { ...currentRecipe };
-    updatedRecipe.ingredients = updatedRecipe.ingredients.filter((_, index) => index !== indexToRemove);
-    setCurrentRecipe(updatedRecipe);
   };
   
   // Handle confirming an ingredient
