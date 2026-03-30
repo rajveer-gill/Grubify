@@ -51,6 +51,12 @@ app.config['SESSION_COOKIE_SECURE'] = True  # Ensure cookies are only sent over 
 CLIENT_ID = os.environ["KROGER_CLIENT_ID"]
 REDIRECT_URI = "https://grubify.onrender.com/callback"
 AUTH_URL = "https://api.kroger.com/v1/connect/oauth2/authorize"  # Add this line
+try:
+    KROGER_WEB_SEARCH_TIMEOUT_SECONDS = max(
+        5, int(os.environ.get("KROGER_WEB_SEARCH_TIMEOUT_SECONDS", "18"))
+    )
+except ValueError:
+    KROGER_WEB_SEARCH_TIMEOUT_SECONDS = 18
 
 UNIT_TO_GRAMS = {
     'tablespoon': 15,  # very rough average
@@ -265,6 +271,9 @@ def kroger_search_upcs():
 
     upcs = []
     failed_items = []
+    # Cache term lookups within a request so duplicate ingredient terms do not
+    # trigger repeated Kroger page fetches (helps avoid upstream timeouts/502s).
+    lookup_cache = {}
 
     for raw in items:
         term, label = parse_search_upc_item(raw)
@@ -272,16 +281,28 @@ def kroger_search_upcs():
             failed_items.append({"item": raw, "reason": "empty_term"})
             continue
 
-        upc, http_status, detail = search_upc_via_kroger_website(term)
-        retried_with = None
+        cache_key = term.strip().lower()
+        cached = lookup_cache.get(cache_key)
+        if cached is None:
+            upc, http_status, detail = search_upc_via_kroger_website(
+                term,
+                timeout=KROGER_WEB_SEARCH_TIMEOUT_SECONDS,
+            )
+            retried_with = None
 
-        if not upc and detail == "no_upc_in_page":
-            for alt in expand_kroger_search_terms(term):
-                u2, st2, d2 = search_upc_via_kroger_website(alt)
-                if u2:
-                    upc, http_status, detail = u2, st2, d2
-                    retried_with = alt
-                    break
+            if not upc and detail == "no_upc_in_page":
+                for alt in expand_kroger_search_terms(term):
+                    u2, st2, d2 = search_upc_via_kroger_website(
+                        alt,
+                        timeout=KROGER_WEB_SEARCH_TIMEOUT_SECONDS,
+                    )
+                    if u2:
+                        upc, http_status, detail = u2, st2, d2
+                        retried_with = alt
+                        break
+            lookup_cache[cache_key] = (upc, http_status, detail, retried_with)
+        else:
+            upc, http_status, detail, retried_with = cached
 
         if detail.startswith("request_error"):
             failed_items.append(
