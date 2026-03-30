@@ -14,14 +14,29 @@ import os
 load_dotenv()
 
 app = Flask(__name__)
-_flask_secret = os.environ.get("FLASK_SECRET_KEY", "").strip()
+_flask_secret = (
+    os.environ.get("FLASK_SECRET_KEY") or os.environ.get("SECRET_KEY") or ""
+).strip()
 if not _flask_secret and os.environ.get("RENDER"):
-    raise RuntimeError("FLASK_SECRET_KEY must be set on Render (use a long random string).")
+    raise RuntimeError(
+        "Set FLASK_SECRET_KEY or SECRET_KEY on Render (Environment): use a long random string, "
+        "e.g. openssl rand -hex 32"
+    )
 app.secret_key = _flask_secret or "dev-only-not-for-production"
 SPOONACULAR_API_KEY = os.environ.get('SPOONACULAR_API_KEY')
 
-# Enable CORS (allow credentials) on every route
-CORS(app, origins=["https://grubify.ai"], supports_credentials=True)
+# Enable CORS (allow credentials) on every route — include Firebase Hosting for Kroger flows
+CORS(
+    app,
+    origins=[
+        "https://grubify.ai",
+        "https://grubify-9cf13.firebaseapp.com",
+        "https://grubify-9cf13.web.app",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ],
+    supports_credentials=True,
+)
 
 
 
@@ -99,6 +114,22 @@ def estimate_grams_from_text(ingredient_text):
             return value * UNIT_TO_GRAMS[unit_name]
 
     return None
+
+def extract_upc_from_kroger_product(product):
+    """First UPC from a Kroger product object (matches JS / prior Cloud Function logic)."""
+    if not product or not isinstance(product, dict):
+        return None
+    direct = product.get("upc") or product.get("UPC")
+    if direct is not None and str(direct).strip():
+        return str(direct)
+    items = product.get("items") or []
+    if items and isinstance(items[0], dict):
+        it = items[0]
+        u = it.get("upc") or it.get("UPC")
+        if u is not None and str(u).strip():
+            return str(u)
+    return None
+
 
 def normalize_ingredient_name(name):
     import re
@@ -225,6 +256,67 @@ def fetch_prices():
     store = data.get("store", "kroger").lower()
     prices = fetch_ingredient_prices(ingredients, store)
     return jsonify(prices)
+
+
+@app.route("/kroger/search-upcs", methods=["POST"])
+def kroger_search_upcs():
+    """
+    Resolve ingredient names to Kroger UPCs using the user's Kroger OAuth token.
+    Called from the browser via Render (Kroger API blocks browser CORS and GCP; Render works).
+    """
+    data = request.get_json(silent=True) or {}
+    items = data.get("items", [])
+    kroger_token = (data.get("kroger_token") or "").strip()
+    if not kroger_token:
+        return jsonify({"error": "kroger_token is required"}), 400
+    if not isinstance(items, list) or len(items) == 0:
+        return jsonify({"error": "items must be a non-empty array"}), 400
+
+    upcs = []
+    failed_items = []
+    seen = set()
+
+    for raw in items:
+        term = str(raw).strip() if raw is not None else ""
+        if not term:
+            failed_items.append({"item": raw, "reason": "empty_term"})
+            continue
+        try:
+            r = requests.get(
+                "https://api.kroger.com/v1/products",
+                params={"filter.term": term},
+                headers={"Authorization": f"Bearer {kroger_token}"},
+                timeout=30,
+            )
+        except requests.RequestException as e:
+            failed_items.append({"item": term, "reason": "request_error", "detail": str(e)[:200]})
+            continue
+        if r.status_code != 200:
+            failed_items.append(
+                {
+                    "item": term,
+                    "reason": "product_search_failed",
+                    "krogerStatus": r.status_code,
+                }
+            )
+            continue
+        try:
+            payload = r.json()
+        except ValueError:
+            failed_items.append({"item": term, "reason": "invalid_json"})
+            continue
+        products = payload.get("data") or []
+        product = products[0] if products else None
+        upc = extract_upc_from_kroger_product(product)
+        if not upc:
+            failed_items.append({"item": term, "reason": "no_upc"})
+            continue
+        if upc not in seen:
+            seen.add(upc)
+            upcs.append(upc)
+
+    return jsonify({"upcs": upcs, "failedItems": failed_items})
+
 
 @app.route("/add-to-cart", methods=["POST"])
 def add_to_cart_route():

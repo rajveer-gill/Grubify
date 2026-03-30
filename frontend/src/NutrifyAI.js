@@ -38,41 +38,30 @@ function logD(...args) {
   if (grubifyDebug()) console.log("[Grubify]", ...args);
 }
 
-/** Match Kroger product JSON shape (same logic as Cloud Function used to use). */
-function extractUpcFromKrogerProduct(product) {
-  if (!product || typeof product !== "object") return null;
-  const direct = product.upc ?? product.UPC;
-  if (direct != null && String(direct).trim() !== "") return String(direct);
-  const items = product.items;
-  if (Array.isArray(items) && items.length) {
-    const it = items[0];
-    if (it && typeof it === "object") {
-      const u = it.upc ?? it.UPC;
-      if (u != null && String(u).trim() !== "") return String(u);
+/** Kroger product search via Flask on Render (browser/GCP cannot call api.kroger.com reliably). */
+async function fetchKrogerSearchUpcsViaRender(items, krogerToken) {
+  const res = await fetch("https://grubify.onrender.com/kroger/search-upcs", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ items, kroger_token: krogerToken }),
+  });
+  const raw = await res.text();
+  let data = {};
+  if (raw.trim()) {
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      return { ok: false, error: "Invalid JSON from search-upcs", status: res.status };
     }
   }
-  return null;
-}
-
-/** Browser-side Kroger product search (Akamai blocks server-side). */
-async function fetchKrogerUpcForTerm(term, userToken) {
-  const url = `https://api.kroger.com/v1/products?filter.term=${encodeURIComponent(term)}`;
-  const res = await fetch(url, {
-    headers: { Authorization: `Bearer ${userToken}` },
-  });
   if (!res.ok) {
-    return { ok: false, reason: "product_search_failed", status: res.status, term };
+    return { ok: false, status: res.status, error: data.error || res.statusText };
   }
-  let data;
-  try {
-    data = await res.json();
-  } catch {
-    return { ok: false, reason: "invalid_json", term };
-  }
-  const product = data?.data?.[0];
-  const upc = extractUpcFromKrogerProduct(product);
-  if (!upc) return { ok: false, reason: "no_upc", term };
-  return { ok: true, upc, term };
+  return {
+    ok: true,
+    upcs: Array.isArray(data.upcs) ? data.upcs : [],
+    failedItems: Array.isArray(data.failedItems) ? data.failedItems : [],
+  };
 }
 
 
@@ -550,7 +539,7 @@ const NutrifyAI = () => {
     }
   };
   
-  // Function to add items to cart: resolve UPCs in the browser (Kroger blocks server-side search), then Cloud Function cart PUT only.
+  // Function to add items to cart: resolve UPCs via Render (Flask), then Cloud Function cart PUT only.
   const addItemsToCart = async (items) => {
     const userToken = localStorage.getItem("kroger_user_token");
     if (!userToken) {
@@ -560,9 +549,7 @@ const NutrifyAI = () => {
 
     try {
       const failedItems = [];
-      const upcsOrdered = [];
-      const seenUpc = new Set();
-
+      const ingredientNames = [];
       for (const raw of items) {
         const term =
           typeof raw === "string" ? raw.trim() : String(raw?.name ?? raw ?? "").trim();
@@ -570,29 +557,31 @@ const NutrifyAI = () => {
           failedItems.push({ item: raw, reason: "empty_term" });
           continue;
         }
-        const found = await fetchKrogerUpcForTerm(term, userToken);
-        if (!found.ok) {
-          failedItems.push({
-            item: term,
-            reason: found.reason,
-            ...(found.status != null ? { krogerStatus: found.status } : {}),
-          });
-          continue;
-        }
-        if (!seenUpc.has(found.upc)) {
-          seenUpc.add(found.upc);
-          upcsOrdered.push(found.upc);
-        }
+        ingredientNames.push(term);
       }
 
-      logD("Kroger UPC resolution", {
+      if (ingredientNames.length === 0) {
+        toast.error("❌ No ingredients to look up.");
+        return { success: false, failedItems };
+      }
+
+      const search = await fetchKrogerSearchUpcsViaRender(ingredientNames, userToken);
+      if (!search.ok) {
+        toast.error(`❌ ${search.error || "Could not search Kroger products"}`);
+        return { success: false };
+      }
+
+      const upcsOrdered = search.upcs;
+      const allFailed = [...failedItems, ...search.failedItems];
+
+      logD("Kroger UPC resolution (Render)", {
         resolved: upcsOrdered.length,
-        failed: failedItems.length,
+        failed: allFailed.length,
       });
 
       if (upcsOrdered.length === 0) {
         toast.error("❌ No Kroger products matched your ingredients. Try simpler names.");
-        return { success: false, failedItems };
+        return { success: false, failedItems: allFailed };
       }
 
       const res = await fetch(
@@ -623,17 +612,17 @@ const NutrifyAI = () => {
       }
       if (!res.ok) {
         toast.error(`❌ ${data.error || res.statusText || "Could not add to cart"}`);
-        return { success: false, failedItems: data.failedItems ?? failedItems };
+        return { success: false, failedItems: data.failedItems ?? allFailed };
       }
       const added = data.addedCount ?? upcsOrdered.length;
-      if (failedItems.length > 0) {
+      if (allFailed.length > 0) {
         toast.success(
-          `✅ Added ${added} item(s) to Kroger cart. ${failedItems.length} ingredient(s) could not be matched.`
+          `✅ Added ${added} item(s) to Kroger cart. ${allFailed.length} ingredient(s) could not be matched.`
         );
       } else {
         toast.success("✅ Added to Kroger cart!");
       }
-      return { success: true, addedCount: added, failedItems: data.failedItems ?? failedItems };
+      return { success: true, addedCount: added, failedItems: data.failedItems ?? allFailed };
     } catch (err) {
       console.error("addItemsToCart error:", err);
       logD("addToKrogerCart network/exception", err?.message, err?.name);
