@@ -198,7 +198,7 @@ exports.generateRecipe = onRequest({ secrets: [openaiKey] }, async (req, res) =>
           return res.status(400).json({ error: "No items provided" });
         }
     
-        // Get Kroger access token
+        // Get Kroger access token (axios throws on non-2xx by default → outer catch → generic 500)
         const tokenRes = await axios.post(
           "https://api.kroger.com/v1/connect/oauth2/token",
           new URLSearchParams({
@@ -213,9 +213,20 @@ exports.generateRecipe = onRequest({ secrets: [openaiKey] }, async (req, res) =>
             headers: {
               "Content-Type": "application/x-www-form-urlencoded",
             },
+            validateStatus: () => true,
           }
         );
-  
+        if (tokenRes.status !== 200 || !tokenRes.data?.access_token) {
+          const d = tokenRes.data;
+          console.error("[addToKrogerCart] Kroger OAuth failed", {
+            status: tokenRes.status,
+            data: typeof d === "object" ? JSON.stringify(d) : d,
+          });
+          return res.status(502).json({
+            error: "Kroger API client credentials failed",
+            krogerStatus: tokenRes.status,
+          });
+        }
         const accessToken = tokenRes.data.access_token;
         const results = [];
 
@@ -245,8 +256,21 @@ exports.generateRecipe = onRequest({ secrets: [openaiKey] }, async (req, res) =>
             headers: {
               Authorization: `Bearer ${accessToken}`,
             },
+            validateStatus: () => true,
           }
         );
+        if (sampleRes.status !== 200) {
+          const d = sampleRes.data;
+          console.error("[addToKrogerCart] Kroger product search failed", {
+            status: sampleRes.status,
+            term: String(items[0]).slice(0, 80),
+            data: typeof d === "object" ? JSON.stringify(d).slice(0, 500) : d,
+          });
+          return res.status(502).json({
+            error: "Kroger product search failed",
+            krogerStatus: sampleRes.status,
+          });
+        }
 
         const product = sampleRes.data?.data?.[0];
         const upc = extractUpcFromKrogerProduct(product);

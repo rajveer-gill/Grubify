@@ -38,6 +38,20 @@ function logD(...args) {
   if (grubifyDebug()) console.log("[Grubify]", ...args);
 }
 
+// #region agent log
+function __dbgIngest(payload) {
+  fetch("http://127.0.0.1:7552/ingest/b4ed0833-2047-432b-9012-57f78d8f1d87", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "d69c08" },
+    body: JSON.stringify({
+      sessionId: "d69c08",
+      timestamp: Date.now(),
+      ...payload,
+    }),
+  }).catch(() => {});
+}
+// #endregion
+
 
 const NutrifyAI = () => {
   const [inputValue, setInputValue] = useState('');
@@ -530,6 +544,19 @@ const NutrifyAI = () => {
         );
       }
       logD("addToKrogerCart request", { count: items.length, items: items.slice(0, 8) });
+      // #region agent log
+      __dbgIngest({
+        location: "NutrifyAI.js:addItemsToCart:preFetch",
+        message: "addToKrogerCart request shape",
+        hypothesisId: "H1",
+        runId: "cart-debug-1",
+        data: {
+          itemCount: items.length,
+          itemNamesSample: Array.isArray(items) ? items.slice(0, 6) : String(items),
+          hasKrogerUserToken: Boolean(userToken && userToken.length > 10),
+        },
+      });
+      // #endregion
       const res = await fetch(
         "https://us-central1-grubify-9cf13.cloudfunctions.net/addToKrogerCart",
         {
@@ -550,6 +577,30 @@ const NutrifyAI = () => {
         bodyLength: raw?.length ?? 0,
         bodyPreview: raw?.length ? raw.slice(0, 200) : "(empty)",
       });
+      // #region agent log
+      let parsedSafe = null;
+      try {
+        parsedSafe = raw?.trim() ? JSON.parse(raw) : null;
+      } catch {
+        parsedSafe = { _parseError: true };
+      }
+      __dbgIngest({
+        location: "NutrifyAI.js:addItemsToCart:postResponse",
+        message: "addToKrogerCart HTTP response",
+        hypothesisId: "H2-H3-H4-H5",
+        runId: "cart-debug-1",
+        data: {
+          status: res.status,
+          ok: res.ok,
+          bodyLength: raw?.length ?? 0,
+          bodyPreview: (raw && raw.slice(0, 1500)) || "",
+          parsedKeys: parsedSafe && typeof parsedSafe === "object" ? Object.keys(parsedSafe) : [],
+          parsedError: parsedSafe?.error,
+          parsedKrogerStatus: parsedSafe?.krogerStatus,
+          parsedDetailType: typeof parsedSafe?.detail,
+        },
+      });
+      // #endregion
       let data = {};
       if (raw.trim()) {
         try {
@@ -572,6 +623,15 @@ const NutrifyAI = () => {
     } catch (err) {
       console.error("addItemsToCart error:", err);
       logD("addToKrogerCart network/exception", err?.message, err?.name);
+      // #region agent log
+      __dbgIngest({
+        location: "NutrifyAI.js:addItemsToCart:catch",
+        message: "addToKrogerCart exception",
+        hypothesisId: "H5",
+        runId: "cart-debug-1",
+        data: { name: err?.name, message: err?.message },
+      });
+      // #endregion
       toast.error("❌ Network error, try again.");
       return { success: false };
     }
