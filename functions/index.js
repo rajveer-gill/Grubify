@@ -64,6 +64,72 @@ function getJsonBody(req) {
   return {};
 }
 
+function parseJsonFromModelContent(text) {
+  const t = (text || "").trim();
+  try {
+    return JSON.parse(t);
+  } catch {
+    /* continue */
+  }
+  const fence = t.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (fence) {
+    try {
+      return JSON.parse(fence[1].trim());
+    } catch {
+      /* continue */
+    }
+  }
+  const i = t.indexOf("{");
+  if (i >= 0) {
+    try {
+      return JSON.parse(t.slice(i));
+    } catch {
+      /* continue */
+    }
+  }
+  throw new Error("Model output was not valid JSON");
+}
+
+function normalizeRecipeIngredient(ing) {
+  const name =
+    typeof ing?.name === "string" ? ing.name.trim() : String(ing?.name ?? "").trim();
+  const amount =
+    typeof ing?.amount === "string" ? ing.amount : String(ing?.amount ?? "");
+  let kq =
+    typeof ing?.krogerSearchQuery === "string"
+      ? ing.krogerSearchQuery.trim()
+      : "";
+  if (!kq && name) {
+    kq =
+      name
+        .replace(/^[\d./\s-]+/, "")
+        .replace(/\s*\([^)]*\)\s*/g, " ")
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 120) || name;
+  }
+  return { name, amount, krogerSearchQuery: kq };
+}
+
+function normalizeStructuredRecipe(recipe) {
+  if (!recipe || typeof recipe !== "object") {
+    return { name: "Recipe", ingredients: [], instructions: [] };
+  }
+  const ingredients = Array.isArray(recipe.ingredients)
+    ? recipe.ingredients
+        .map((x) => normalizeRecipeIngredient(x))
+        .filter((x) => x.name)
+    : [];
+  const instructions = Array.isArray(recipe.instructions)
+    ? recipe.instructions.map((x) => String(x).trim()).filter(Boolean)
+    : [];
+  return {
+    name: String(recipe.name || "Recipe").trim() || "Recipe",
+    ingredients,
+    instructions,
+  };
+}
+
 exports.generateRecipe = onRequest({ secrets: [openaiKey] }, async (req, res) => {
     cors(req, res, async () => {
       if (req.method === "OPTIONS") {
@@ -75,23 +141,34 @@ exports.generateRecipe = onRequest({ secrets: [openaiKey] }, async (req, res) =>
       }
   
       try {
-        const description = req.body.description;
-  
+        const body = getJsonBody(req);
+        const description = body.description;
+        if (!description || typeof description !== "string") {
+          return res.status(400).json({ error: "description is required" });
+        }
+
+        const systemRules =
+          "Return a single JSON object with keys: name (string), ingredients (array), instructions (array). " +
+          "Each ingredient must be an object with: name (string), amount (string), " +
+          "krogerSearchQuery (string): 2–6 words, grocery-shelf language only, no quantities in krogerSearchQuery. " +
+          "JSON only.";
+
         const completion = await axios.post(
           "https://api.openai.com/v1/chat/completions",
           {
-            model: "gpt-3.5-turbo",
+            model: "gpt-4o-mini",
             messages: [
               {
                 role: "system",
-                content:
-                  "You are a helpful assistant that generates recipes based on user input. Return the recipe in JSON format with 'name', 'ingredients' (array of { name, amount }), and 'instructions' (array of steps).",
+                content: `You are a helpful assistant that generates recipes. ${systemRules}`,
               },
               {
                 role: "user",
                 content: `Generate a recipe for: ${description}`,
               },
             ],
+            response_format: { type: "json_object" },
+            temperature: 0.7,
           },
           {
             headers: {
@@ -102,8 +179,8 @@ exports.generateRecipe = onRequest({ secrets: [openaiKey] }, async (req, res) =>
         );
   
         const text = completion.data.choices[0].message.content;
-  
-        const recipeJson = JSON.parse(text);
+        const raw = parseJsonFromModelContent(text);
+        const recipeJson = normalizeStructuredRecipe(raw);
   
         return res.status(200).json({
           structured_recipe: recipeJson,

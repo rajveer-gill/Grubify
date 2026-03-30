@@ -1,7 +1,9 @@
 from flask import Flask, request, jsonify, redirect, session
 from flask_cors import CORS, cross_origin
 from recipe_handler import fetch_recipe
+from kroger_search_expand import expand_kroger_search_terms
 from kroger_website_search import search_upc_via_kroger_website
+from recipe_schema import RECIPE_SYSTEM_JSON_RULES, normalize_recipe_dict, parse_search_upc_item
 from store_handler import fetch_ingredient_prices
 from user import exchange_code_for_token, add_item_to_cart
 from dotenv import load_dotenv
@@ -266,19 +268,30 @@ def kroger_search_upcs():
     seen = set()
 
     for raw in items:
-        term = str(raw).strip() if raw is not None else ""
+        term, label = parse_search_upc_item(raw)
         if not term:
             failed_items.append({"item": raw, "reason": "empty_term"})
             continue
 
         upc, http_status, detail = search_upc_via_kroger_website(term)
+        retried_with = None
+
+        if not upc and detail == "no_upc_in_page":
+            for alt in expand_kroger_search_terms(term):
+                u2, st2, d2 = search_upc_via_kroger_website(alt)
+                if u2:
+                    upc, http_status, detail = u2, st2, d2
+                    retried_with = alt
+                    break
 
         if detail.startswith("request_error"):
-            failed_items.append({"item": term, "reason": "request_error", "detail": detail})
+            failed_items.append(
+                {"item": label or term, "reason": "request_error", "detail": detail}
+            )
             continue
         if not upc:
             entry = {
-                "item": term,
+                "item": label or term,
                 "reason": "no_upc" if detail == "no_upc_in_page" else "product_search_failed",
                 "detail": detail,
             }
@@ -286,6 +299,8 @@ def kroger_search_upcs():
                 entry["krogerStatus"] = http_status
             failed_items.append(entry)
             continue
+        if retried_with:
+            print(f"[search-upcs] alternate query matched: '{term}' -> '{retried_with}'")
         if upc not in seen:
             seen.add(upc)
             upcs.append(upc)
@@ -401,48 +416,49 @@ def refine_recipe():
     if not original_recipe or not edit_instruction:
         return jsonify({"error": "Missing original recipe or instruction"}), 400
 
-    openai_key = os.environ.get("OPENAI_API_KEY")
-    headers = {
-        "Authorization": f"Bearer {openai_key}",
-        "Content-Type": "application/json"
-    }
+    openai_key = (os.environ.get("OPENAI_API_KEY") or "").strip()
+    if not openai_key:
+        return jsonify({"error": "OpenAI not configured"}), 500
 
-    prompt = f"""You are an assistant that modifies recipes based on user requests.
-    Here is the original recipe:
-    {original_recipe}
-
-    Please modify it based on this user instruction:
-    {edit_instruction}
-
-    Return the result in structured JSON format with 'name', 'ingredients' (array), and 'instructions' (array)."""
-
+    user_payload = json_lib.dumps(
+        {"original_recipe": original_recipe, "edit_instruction": edit_instruction},
+        ensure_ascii=False,
+    )
     response = requests.post(
         "https://api.openai.com/v1/chat/completions",
-        headers=headers,
+        headers={
+            "Authorization": f"Bearer {openai_key}",
+            "Content-Type": "application/json",
+        },
         json={
-            "model": "gpt-3.5-turbo",
+            "model": "gpt-4o-mini",
             "messages": [
-                {"role": "system", "content": "You are a helpful AI recipe assistant."},
-                {"role": "user", "content": prompt}
-            ]
-        }
+                {
+                    "role": "system",
+                    "content": "You modify recipes based on user instructions. "
+                    + RECIPE_SYSTEM_JSON_RULES,
+                },
+                {"role": "user", "content": user_payload},
+            ],
+            "response_format": {"type": "json_object"},
+            "temperature": 0.5,
+        },
+        timeout=90,
     )
 
-    if response.status_code == 200:
-        response_text = response.json()["choices"][0]["message"]["content"]
-        
-        try:
-            json_start = response_text.find('{')
-            json_data = response_text[json_start:]
-            parsed_recipe = json_lib.loads(json_data)
-            return jsonify(parsed_recipe)
-        except Exception as e:
-            print("❌ Failed to parse recipe JSON:", str(e))
-            print("🔎 Raw response text:", response_text)
-            return jsonify({"error": "Failed to parse structured recipe"}), 500
-    else:
+    if response.status_code != 200:
         print("Error refining recipe:", response.text)
         return jsonify({"error": "Failed to refine recipe"}), 500
+
+    response_text = response.json()["choices"][0]["message"]["content"]
+    try:
+        parsed_recipe = json_lib.loads(response_text.strip())
+        parsed_recipe = normalize_recipe_dict(parsed_recipe)
+        return jsonify(parsed_recipe)
+    except Exception as e:
+        print("❌ Failed to parse recipe JSON:", str(e))
+        print("🔎 Raw response text:", response_text[:800] if response_text else "")
+        return jsonify({"error": "Failed to parse structured recipe"}), 500
 
 @app.route('/calculate-nutrition', methods=['POST'])
 @cross_origin(origin="https://grubify.ai",

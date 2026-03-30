@@ -38,6 +38,33 @@ function logD(...args) {
   if (grubifyDebug()) console.log("[Grubify]", ...args);
 }
 
+/** Ensure each ingredient has krogerSearchQuery for Kroger product search (server + fallback). */
+function ensureIngredientShape(ing) {
+  const name =
+    typeof ing?.name === "string" ? ing.name.trim() : String(ing?.name ?? "").trim();
+  const amount =
+    typeof ing?.amount === "string" ? ing.amount : String(ing?.amount ?? "");
+  let kq =
+    typeof ing?.krogerSearchQuery === "string"
+      ? ing.krogerSearchQuery.trim()
+      : "";
+  if (!kq && name) {
+    let s = name.replace(/^[\d./\s-]+/, "");
+    s = s.replace(
+      /^(cups?|tablespoons?|teaspoons?|tbsp\.?|tsp\.?|ounces?|oz\.?|pounds?|lbs?\.?|grams?|g|kilograms?|kg|milliliters?|ml|liters?|l|quarts?|qt|pints?|pt|sticks?)\s+/i,
+      ""
+    );
+    s = s.replace(/^[\d./\s-]+/, "");
+    kq =
+      s
+        .replace(/\s*\([^)]*\)\s*/g, " ")
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 120) || name;
+  }
+  return { ...ing, name, amount, krogerSearchQuery: kq };
+}
+
 /** Kroger product search via Flask on Render (browser/GCP cannot call api.kroger.com reliably). */
 async function fetchKrogerSearchUpcsViaRender(items, krogerToken) {
   const token = (krogerToken != null && String(krogerToken).trim()) || "";
@@ -459,7 +486,7 @@ const NutrifyAI = () => {
             ...data,
             id: doc.id,
             ingredients: data.ingredients.map((ing) => ({
-              ...ing,
+              ...ensureIngredientShape(ing),
               confirmed: false
             }))
           });
@@ -579,23 +606,41 @@ const NutrifyAI = () => {
 
     try {
       const failedItems = [];
-      const ingredientNames = [];
+      const ingredientPayloads = [];
       for (const raw of items) {
-        const term =
-          typeof raw === "string" ? raw.trim() : String(raw?.name ?? raw ?? "").trim();
-        if (!term) {
+        let shaped;
+        if (typeof raw === "string") {
+          const term = raw.trim();
+          if (!term) {
+            failedItems.push({ item: raw, reason: "empty_term" });
+            continue;
+          }
+          shaped = ensureIngredientShape({ name: term, amount: "" });
+        } else {
+          shaped = ensureIngredientShape(raw);
+          const q = (shaped.krogerSearchQuery || shaped.name || "").trim();
+          if (!q) {
+            failedItems.push({ item: raw, reason: "empty_term" });
+            continue;
+          }
+        }
+        const searchTerm = (shaped.krogerSearchQuery || shaped.name || "").trim();
+        if (!searchTerm) {
           failedItems.push({ item: raw, reason: "empty_term" });
           continue;
         }
-        ingredientNames.push(term);
+        ingredientPayloads.push({
+          name: shaped.name || searchTerm,
+          krogerSearchQuery: searchTerm,
+        });
       }
 
-      if (ingredientNames.length === 0) {
+      if (ingredientPayloads.length === 0) {
         toast.error("❌ No ingredients to look up.");
         return { success: false, failedItems };
       }
 
-      const search = await fetchKrogerSearchUpcsViaRender(ingredientNames, userToken);
+      const search = await fetchKrogerSearchUpcsViaRender(ingredientPayloads, userToken);
       if (!search.ok) {
         toast.error(`❌ ${search.error || "Could not search Kroger products"}`);
         return { success: false };
@@ -682,8 +727,8 @@ const NutrifyAI = () => {
       // Add pantry status to ingredients (randomly for demo)
       const recipeWithPantry = {
         ...recipe,
-        ingredients: recipe.ingredients.map(ingredient => ({
-          ...ingredient,
+        ingredients: recipe.ingredients.map((ingredient) => ({
+          ...ensureIngredientShape(ingredient),
           confirmed: true,
         })),
       };
@@ -730,12 +775,13 @@ const NutrifyAI = () => {
       const updatedRecipe = {
         ...modifiedRecipe,
         ingredients: modifiedRecipe.ingredients.map(newIngredient => {
+          const shaped = ensureIngredientShape(newIngredient);
           const existingIngredient = currentRecipe.ingredients.find(
-            ing => ing.name.toLowerCase() === newIngredient.name.toLowerCase()
+            ing => ing.name.toLowerCase() === shaped.name.toLowerCase()
           );
           
           return {
-            ...newIngredient,
+            ...shaped,
             inPantry: existingIngredient ? existingIngredient.inPantry : Math.random() > 0.6,
             confirmed: existingIngredient ? existingIngredient.confirmed : false
           };
@@ -792,7 +838,7 @@ const NutrifyAI = () => {
   
     const confirmedIngredients = currentRecipe.ingredients
       .filter(ing => ing.confirmed && !ing.inPantry)
-      .map(ing => ing.name);
+      .map(ing => ensureIngredientShape(ing));
   
     if (confirmedIngredients.length === 0) {
       toast.error("✅ Please confirm at least one ingredient to order.");
@@ -803,7 +849,7 @@ const NutrifyAI = () => {
     setCartStatus('adding'); // Show "adding" overlay
   
     try {
-      const result = await addItemsToCart(confirmedIngredients, 'kroger');
+      const result = await addItemsToCart(confirmedIngredients);
 
       if (result.success) {
         setCartStatus('success');
@@ -1378,7 +1424,7 @@ const NutrifyAI = () => {
                           const preparedRecipe = {
                             ...recipe,
                             ingredients: recipe.ingredients.map(ingredient => ({
-                              ...ingredient,
+                              ...ensureIngredientShape(ingredient),
                               confirmed: false
                             }))
                           };
