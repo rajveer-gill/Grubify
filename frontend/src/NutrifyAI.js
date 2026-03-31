@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { auth, provider } from "./firebase";
 import { signInWithPopup, signOut, sendEmailVerification, sendPasswordResetEmail} from "firebase/auth";
 import { useAuth } from "./hooks/useAuth";
@@ -112,8 +112,20 @@ function ensureIngredientShape(ing) {
  * parallel Kroger connections from the server (often all time out from datacenter IPs).
  */
 const KROGER_SEARCH_UPCS_CHUNK_SIZE = 1;
+/** Max wait per chunk (server Kroger fetch + JSON); must stay under Render ~100s proxy where applicable. */
+const KROGER_SEARCH_CHUNK_FETCH_MS = 95_000;
+/** Whole UPC phase cannot exceed this (many ingredients × chunks). */
+/** Max total time for all Kroger search chunks (then we stop with a clear error). */
+const KROGER_SEARCH_UPCS_MAX_MS = 8 * 60 * 1000;
+/** Hard cap for entire add-to-cart flow (user cancel uses AbortController). */
+const CART_FLOW_HARD_MAX_MS = 9 * 60 * 1000;
 
-async function fetchKrogerSearchUpcsViaRender(items, krogerToken) {
+/**
+ * @param {AbortSignal} [options.signal] — user cancel or global timeout
+ * @param {(p: { current: number, total: number }) => void} [options.onProgress]
+ */
+async function fetchKrogerSearchUpcsViaRender(items, krogerToken, options = {}) {
+  const { signal: outerSignal, onProgress } = options;
   const token = (krogerToken != null && String(krogerToken).trim()) || "";
   if (!token) {
     logKroger("search-upcs aborted", { reason: "no_token" });
@@ -129,6 +141,8 @@ async function fetchKrogerSearchUpcsViaRender(items, krogerToken) {
   }
 
   const t0 = typeof performance !== "undefined" ? performance.now() : Date.now();
+  const overallDeadline = t0 + KROGER_SEARCH_UPCS_MAX_MS;
+
   logKroger("search-upcs request (chunked)", {
     url: "https://grubify.onrender.com/kroger/search-upcs",
     itemCount: list.length,
@@ -143,18 +157,63 @@ async function fetchKrogerSearchUpcsViaRender(items, krogerToken) {
   let lastRequestId = null;
 
   for (let c = 0; c < chunks.length; c++) {
+    if (outerSignal?.aborted) {
+      throw Object.assign(new Error("aborted"), { name: "AbortError" });
+    }
+    if (
+      typeof performance !== "undefined" &&
+      performance.now() > overallDeadline
+    ) {
+      return {
+        ok: false,
+        error: "Kroger search took too long overall. Try fewer ingredients or try again later.",
+        status: 0,
+      };
+    }
+
     const chunk = chunks[c];
     const chunkLabel = `${c + 1}/${chunks.length}`;
+    onProgress?.({ current: c + 1, total: chunks.length });
+
+    const chunkAc = new AbortController();
+    const chunkTimer = setTimeout(() => chunkAc.abort(), KROGER_SEARCH_CHUNK_FETCH_MS);
+    const onOuterAbort = () => {
+      clearTimeout(chunkTimer);
+      chunkAc.abort();
+    };
+    if (outerSignal) {
+      outerSignal.addEventListener("abort", onOuterAbort);
+    }
+
     let res;
     try {
       res = await fetch("https://grubify.onrender.com/kroger/search-upcs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ items: chunk, kroger_token: token }),
+        signal: chunkAc.signal,
       });
     } catch (networkErr) {
+      if (outerSignal) outerSignal.removeEventListener("abort", onOuterAbort);
+      clearTimeout(chunkTimer);
       const ms =
         (typeof performance !== "undefined" ? performance.now() : Date.now()) - t0;
+      if (networkErr?.name === "AbortError" || chunkAc.signal.aborted) {
+        if (outerSignal?.aborted) {
+          throw networkErr;
+        }
+        console.error("[Grubify][kroger] search-upcs chunk timed out", {
+          chunk: chunkLabel,
+          ms: Math.round(ms),
+          maxMs: KROGER_SEARCH_CHUNK_FETCH_MS,
+        });
+        return {
+          ok: false,
+          error:
+            "Kroger product lookup timed out on one item. Try again or order fewer ingredients at once.",
+          status: 0,
+        };
+      }
       console.error("[Grubify][kroger] search-upcs network error", {
         chunk: chunkLabel,
         ms: Math.round(ms),
@@ -165,6 +224,8 @@ async function fetchKrogerSearchUpcsViaRender(items, krogerToken) {
       });
       throw networkErr;
     }
+    if (outerSignal) outerSignal.removeEventListener("abort", onOuterAbort);
+    clearTimeout(chunkTimer);
 
     const raw = await res.text();
     const requestId =
@@ -239,6 +300,9 @@ const NutrifyAI = () => {
   const [modificationLoading, setModificationLoading] = useState(false);
   const [chatHistory, setChatHistory] = useState([]);
   const [cartStatus, setCartStatus] = useState(null); // State for cart overlay status
+  /** While adding to Kroger: which product chunk is being looked up (1-based / total). */
+  const [cartProgress, setCartProgress] = useState(null);
+  const cartFlowAbortRef = useRef(null);
   const [recipeSaving, setRecipeSaving] = useState(false); // State to track save recipe operation
   const [pastRecipes, setPastRecipes] = useState([]); // NEW state for past recipes
   const [pastRecipesLoading, setPastRecipesLoading] = useState(false); // NEW state for loading indicator
@@ -717,7 +781,8 @@ const NutrifyAI = () => {
   };
   
   // Function to add items to cart: resolve UPCs via Render (Flask), then Cloud Function cart PUT only.
-  const addItemsToCart = async (items) => {
+  const addItemsToCart = async (items, flowOptions = {}) => {
+    const { signal: flowSignal, onProgress } = flowOptions;
     const rawStored = localStorage.getItem("kroger_user_token");
     const userToken = rawStored ? String(rawStored).trim() : "";
     logKroger("addItemsToCart start", { token: summarizeToken(userToken) });
@@ -768,7 +833,11 @@ const NutrifyAI = () => {
 
       logKrogerVerbose("addItemsToCart ingredientPayloads", ingredientPayloads);
 
-      const search = await fetchKrogerSearchUpcsViaRender(ingredientPayloads, userToken);
+      const search = await fetchKrogerSearchUpcsViaRender(
+        ingredientPayloads,
+        userToken,
+        { signal: flowSignal, onProgress }
+      );
       if (!search.ok) {
         logKroger("addItemsToCart stop", {
           reason: "search_upcs_failed",
@@ -816,6 +885,7 @@ const NutrifyAI = () => {
             Authorization: `Bearer ${userToken}`,
           },
           body: JSON.stringify({ upcs: upcsOrdered }),
+          signal: flowSignal,
         });
       } catch (cartNetErr) {
         const cms =
@@ -875,6 +945,12 @@ const NutrifyAI = () => {
       }
       return { success: true, addedCount: added, failedItems: data.failedItems ?? allFailed };
     } catch (err) {
+      if (err?.name === "AbortError" || flowSignal?.aborted) {
+        toast.error(
+          "Kroger lookup was cancelled or hit the time limit. Try fewer ingredients or try again later."
+        );
+        return { success: false, aborted: true };
+      }
       console.error("[Grubify][kroger] addItemsToCart exception", {
         name: err?.name,
         message: err?.message,
@@ -1042,10 +1118,22 @@ const NutrifyAI = () => {
     logKrogerVerbose("Order with Kroger full ingredients", confirmedIngredients);
   
     setLoading(true);
-    setCartStatus('adding'); // Show "adding" overlay
-  
+    setCartStatus('adding');
+    setCartProgress({
+      current: 0,
+      total: confirmedIngredients.length,
+    });
+
+    const flowAc = new AbortController();
+    cartFlowAbortRef.current = flowAc;
+    const flowHardStop = setTimeout(() => flowAc.abort(), CART_FLOW_HARD_MAX_MS);
+
     try {
-      const result = await addItemsToCart(confirmedIngredients);
+      const result = await addItemsToCart(confirmedIngredients, {
+        signal: flowAc.signal,
+        onProgress: ({ current, total }) =>
+          setCartProgress({ current, total }),
+      });
 
       if (result.success) {
         logKroger("Order with Kroger finished", { success: true, addedCount: result.addedCount });
@@ -1061,6 +1149,9 @@ const NutrifyAI = () => {
       console.error("[Grubify][kroger] Order with Kroger exception", error);
       setCartStatus('error');
     } finally {
+      clearTimeout(flowHardStop);
+      cartFlowAbortRef.current = null;
+      setCartProgress(null);
       setLoading(false);
     }
   };
@@ -1677,13 +1768,24 @@ const NutrifyAI = () => {
                   <div className="cart-loader"></div>
                 </div>
                 <h3>Adding Items to Kroger</h3>
-                <p>Please wait while we add your ingredients to your Kroger cart.</p>
+                <p>
+                  {cartProgress && cartProgress.total > 0
+                    ? `Looking up product ${cartProgress.current} of ${cartProgress.total} on Kroger. Each step can take up to ~${Math.round(
+                        KROGER_SEARCH_CHUNK_FETCH_MS / 1000
+                      )}s — thanks for your patience.`
+                    : "Please wait while we add your ingredients to your Kroger cart."}
+                </p>
                 <div className="progress-bar">
                   <div className="progress-fill"></div>
                 </div>
                 <button 
                   className="secondary-button" 
-                  onClick={() => setCartStatus(null)}
+                  onClick={() => {
+                    cartFlowAbortRef.current?.abort();
+                    setCartStatus(null);
+                    setLoading(false);
+                    setCartProgress(null);
+                  }}
                 >
                   Cancel
                 </button>
