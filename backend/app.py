@@ -11,8 +11,10 @@ from data import Database
 from quantulum3 import parser as quantulum_parser
 from concurrent.futures import ThreadPoolExecutor
 import json as json_lib
-import requests
 import os
+import requests
+import time
+import uuid
 
 # Load environment variables
 load_dotenv()
@@ -41,6 +43,7 @@ CORS(
         "http://127.0.0.1:3000",
     ],
     supports_credentials=True,
+    expose_headers=["X-Request-Id"],
 )
 
 
@@ -61,8 +64,9 @@ except ValueError:
     KROGER_WEB_SEARCH_TIMEOUT_SECONDS = 18
 
 
-def _resolve_kroger_term(term: str):
+def _resolve_kroger_term(term: str, req_id: str = ""):
     """One Kroger HTML search (+ optional OpenAI alternates). Used by ThreadPoolExecutor."""
+    t0 = time.perf_counter()
     upc, http_status, detail = search_upc_via_kroger_website(
         term,
         timeout=KROGER_WEB_SEARCH_TIMEOUT_SECONDS,
@@ -78,6 +82,14 @@ def _resolve_kroger_term(term: str):
                 upc, http_status, detail = u2, st2, d2
                 retried_with = alt
                 break
+    elapsed = time.perf_counter() - t0
+    rid = req_id or "-"
+    upc_disp = upc or "-"
+    retry_note = f" retry={retried_with!r}" if retried_with else ""
+    print(
+        f"[search-upcs req={rid}] term={term[:56]!r} upc={upc_disp} "
+        f"detail={detail!r} http={http_status}{retry_note} {elapsed:.2f}s"
+    )
     return (upc, http_status, detail, retried_with)
 
 
@@ -284,13 +296,28 @@ def kroger_search_upcs():
     The consumer site is a different origin and is fetched server-side from Render.
     kroger_token is still required so only clients that completed Kroger OAuth call this.
     """
+    req_id = uuid.uuid4().hex[:10]
+    t_req = time.perf_counter()
     data = request.get_json(silent=True) or {}
     items = data.get("items", [])
     kroger_token = (data.get("kroger_token") or "").strip()
+    origin = request.headers.get("Origin", "(no Origin header)")
     if not kroger_token:
-        return jsonify({"error": "kroger_token is required"}), 400
+        print(f"[search-upcs req={req_id}] reject 400: missing kroger_token origin={origin!r}")
+        bad = jsonify({"error": "kroger_token is required"})
+        bad.headers["X-Request-Id"] = req_id
+        return bad, 400
     if not isinstance(items, list) or len(items) == 0:
-        return jsonify({"error": "items must be a non-empty array"}), 400
+        print(f"[search-upcs req={req_id}] reject 400: bad items origin={origin!r}")
+        bad = jsonify({"error": "items must be a non-empty array"})
+        bad.headers["X-Request-Id"] = req_id
+        return bad, 400
+
+    print(
+        f"[search-upcs req={req_id}] start origin={origin!r} "
+        f"items={len(items)} token_len={len(kroger_token)} "
+        f"timeout_s={KROGER_WEB_SEARCH_TIMEOUT_SECONDS}"
+    )
 
     upcs = []
     failed_items = []
@@ -310,8 +337,14 @@ def kroger_search_upcs():
 
     if unique_terms:
         max_workers = min(4, len(unique_terms))
+        print(
+            f"[search-upcs req={req_id}] unique_terms={len(unique_terms)} "
+            f"workers={max_workers} terms={unique_terms!r}"
+        )
         with ThreadPoolExecutor(max_workers=max_workers) as ex:
-            resolved = list(ex.map(_resolve_kroger_term, unique_terms))
+            resolved = list(
+                ex.map(lambda t: _resolve_kroger_term(t, req_id), unique_terms)
+            )
         for term, result in zip(unique_terms, resolved):
             lookup_cache[term.strip().lower()] = result
 
@@ -339,13 +372,20 @@ def kroger_search_upcs():
                 entry["krogerStatus"] = http_status
             failed_items.append(entry)
             continue
-        if retried_with:
-            print(f"[search-upcs] alternate query matched: '{term}' -> '{retried_with}'")
         # Keep one UPC per input ingredient so downstream cart quantities
         # can reflect how many ingredients mapped to the same product.
         upcs.append(upc)
 
-    return jsonify({"upcs": upcs, "failedItems": failed_items})
+    elapsed_req = time.perf_counter() - t_req
+    fail_reasons = [f.get("reason", "?") for f in failed_items]
+    print(
+        f"[search-upcs req={req_id}] done in {elapsed_req:.2f}s "
+        f"upcs={len(upcs)} failed={len(failed_items)} reasons={fail_reasons!r}"
+    )
+
+    ok = jsonify({"upcs": upcs, "failedItems": failed_items})
+    ok.headers["X-Request-Id"] = req_id
+    return ok
 
 
 @app.route("/add-to-cart", methods=["POST"])

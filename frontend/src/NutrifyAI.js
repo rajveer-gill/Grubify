@@ -43,6 +43,42 @@ function logD(...args) {
   if (grubifyDebug()) console.log("[Grubify]", ...args);
 }
 
+/** Extra Kroger order logs: ?kroger_debug=1 or localStorage grubify_kroger_debug=1 (also enabled when grubify_debug is on). */
+function krogerOrderVerbose() {
+  try {
+    return (
+      grubifyDebug() ||
+      (typeof window !== "undefined" &&
+        (localStorage.getItem("grubify_kroger_debug") === "1" ||
+          new URLSearchParams(window.location.search).get("kroger_debug") === "1"))
+    );
+  } catch {
+    return false;
+  }
+}
+
+/** Always log (concise) — use for order flow milestones so DevTools shows what happened without a flag. */
+function logKroger(phase, payload) {
+  if (payload !== undefined) {
+    console.log("[Grubify][kroger]", phase, payload);
+  } else {
+    console.log("[Grubify][kroger]", phase);
+  }
+}
+
+function logKrogerVerbose(phase, payload) {
+  if (krogerOrderVerbose()) {
+    console.log("[Grubify][kroger][verbose]", phase, payload);
+  }
+}
+
+function summarizeToken(t) {
+  const s = t != null ? String(t).trim() : "";
+  if (!s) return "(none)";
+  if (s.length <= 14) return `(len=${s.length})`;
+  return `${s.slice(0, 6)}…${s.slice(-4)} (len=${s.length})`;
+}
+
 /** Ensure each ingredient has krogerSearchQuery for Kroger product search (server + fallback). */
 function ensureIngredientShape(ing) {
   const name =
@@ -74,31 +110,87 @@ function ensureIngredientShape(ing) {
 async function fetchKrogerSearchUpcsViaRender(items, krogerToken) {
   const token = (krogerToken != null && String(krogerToken).trim()) || "";
   if (!token) {
+    logKroger("search-upcs aborted", { reason: "no_token" });
     throw new Error(
       "No Kroger token available — use Login with Kroger in the sidebar and complete sign-in."
     );
   }
-  const res = await fetch("https://grubify.onrender.com/kroger/search-upcs", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ items, kroger_token: token }),
+  const t0 = typeof performance !== "undefined" ? performance.now() : Date.now();
+  const itemCount = Array.isArray(items) ? items.length : 0;
+  logKroger("search-upcs request", {
+    url: "https://grubify.onrender.com/kroger/search-upcs",
+    itemCount,
+    token: summarizeToken(token),
   });
+  logKrogerVerbose("search-upcs payload (items only, no token)", items);
+
+  let res;
+  try {
+    res = await fetch("https://grubify.onrender.com/kroger/search-upcs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ items, kroger_token: token }),
+    });
+  } catch (networkErr) {
+    const ms = (typeof performance !== "undefined" ? performance.now() : Date.now()) - t0;
+    console.error("[Grubify][kroger] search-upcs network error", {
+      ms: Math.round(ms),
+      name: networkErr?.name,
+      message: networkErr?.message,
+      hint:
+        "Often CORS or connection drop if Render/gunicorn timed out — check Render logs for [search-upcs req=…]",
+    });
+    throw networkErr;
+  }
+
   const raw = await res.text();
+  const ms = (typeof performance !== "undefined" ? performance.now() : Date.now()) - t0;
+  const requestId =
+    typeof res.headers?.get === "function"
+      ? res.headers.get("X-Request-Id")
+      : null;
   let data = {};
   if (raw.trim()) {
     try {
       data = JSON.parse(raw);
-    } catch {
+    } catch (parseErr) {
+      console.error("[Grubify][kroger] search-upcs invalid JSON", {
+        status: res.status,
+        ms: Math.round(ms),
+        requestId,
+        bodyPreview: raw.slice(0, 400),
+      });
       return { ok: false, error: "Invalid JSON from search-upcs", status: res.status };
     }
   }
   if (!res.ok) {
+    console.error("[Grubify][kroger] search-upcs HTTP error", {
+      status: res.status,
+      ms: Math.round(ms),
+      requestId,
+      error: data.error || res.statusText,
+      bodyPreview: raw.slice(0, 400),
+    });
+    if (requestId) {
+      logKroger("search-upcs failed — grep Render logs for", { requestId });
+    }
     return { ok: false, status: res.status, error: data.error || res.statusText };
   }
+
+  const upcs = Array.isArray(data.upcs) ? data.upcs : [];
+  const failedItems = Array.isArray(data.failedItems) ? data.failedItems : [];
+  logKroger("search-upcs OK", {
+    ms: Math.round(ms),
+    requestId,
+    upcCount: upcs.length,
+    failedCount: failedItems.length,
+  });
+  logKrogerVerbose("search-upcs response body", { upcs, failedItems });
+
   return {
     ok: true,
-    upcs: Array.isArray(data.upcs) ? data.upcs : [],
-    failedItems: Array.isArray(data.failedItems) ? data.failedItems : [],
+    upcs,
+    failedItems,
   };
 }
 
@@ -594,13 +686,7 @@ const NutrifyAI = () => {
   const addItemsToCart = async (items) => {
     const rawStored = localStorage.getItem("kroger_user_token");
     const userToken = rawStored ? String(rawStored).trim() : "";
-    const tokenPreview =
-      userToken.length > 12
-        ? `${userToken.slice(0, 6)}…${userToken.slice(-4)} (len=${userToken.length})`
-        : userToken
-          ? `(short token, len=${userToken.length})`
-          : "(none)";
-    console.log("[Grubify] addItemsToCart kroger token:", tokenPreview);
+    logKroger("addItemsToCart start", { token: summarizeToken(userToken) });
 
     if (!userToken) {
       toast.error(
@@ -641,12 +727,20 @@ const NutrifyAI = () => {
       }
 
       if (ingredientPayloads.length === 0) {
+        logKroger("addItemsToCart stop", { reason: "no_ingredient_payloads" });
         toast.error("❌ No ingredients to look up.");
         return { success: false, failedItems };
       }
 
+      logKrogerVerbose("addItemsToCart ingredientPayloads", ingredientPayloads);
+
       const search = await fetchKrogerSearchUpcsViaRender(ingredientPayloads, userToken);
       if (!search.ok) {
+        logKroger("addItemsToCart stop", {
+          reason: "search_upcs_failed",
+          status: search.status,
+          error: search.error,
+        });
         toast.error(`❌ ${search.error || "Could not search Kroger products"}`);
         return { success: false };
       }
@@ -660,22 +754,49 @@ const NutrifyAI = () => {
       });
 
       if (upcsOrdered.length === 0) {
+        logKroger("addItemsToCart stop", {
+          reason: "zero_upcs",
+          failedItems: allFailed,
+        });
         toast.error("❌ No Kroger products matched your ingredients. Try simpler names.");
         return { success: false, failedItems: allFailed };
       }
 
-      const res = await fetch(
-        "https://us-central1-grubify-9cf13.cloudfunctions.net/addToKrogerCart",
-        {
+      const cartUrl =
+        "https://us-central1-grubify-9cf13.cloudfunctions.net/addToKrogerCart";
+      const tCart =
+        typeof performance !== "undefined" ? performance.now() : Date.now();
+      logKroger("addToKrogerCart Cloud Function request", {
+        url: cartUrl,
+        upcCount: upcsOrdered.length,
+        token: summarizeToken(userToken),
+      });
+      logKrogerVerbose("addToKrogerCart UPCs", upcsOrdered);
+
+      let res;
+      try {
+        res = await fetch(cartUrl, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${userToken}`,
           },
           body: JSON.stringify({ upcs: upcsOrdered }),
-        }
-      );
+        });
+      } catch (cartNetErr) {
+        const cms =
+          (typeof performance !== "undefined" ? performance.now() : Date.now()) -
+          tCart;
+        console.error("[Grubify][kroger] addToKrogerCart network error", {
+          ms: Math.round(cms),
+          message: cartNetErr?.message,
+        });
+        throw cartNetErr;
+      }
       const raw = await res.text();
+      const cartMs =
+        (typeof performance !== "undefined" ? performance.now() : Date.now()) -
+        tCart;
       logD("addToKrogerCart response", {
         status: res.status,
         ok: res.ok,
@@ -686,14 +807,30 @@ const NutrifyAI = () => {
         try {
           data = JSON.parse(raw);
         } catch (parseErr) {
+          console.error("[Grubify][kroger] addToKrogerCart invalid JSON", {
+            status: res.status,
+            ms: Math.round(cartMs),
+            bodyPreview: raw.slice(0, 400),
+          });
           logD("addToKrogerCart JSON parse error", parseErr?.message);
           data = { error: "Invalid response from cart service" };
         }
       }
       if (!res.ok) {
+        console.error("[Grubify][kroger] addToKrogerCart HTTP error", {
+          status: res.status,
+          ms: Math.round(cartMs),
+          error: data.error,
+          bodyPreview: raw.slice(0, 400),
+        });
         toast.error(`❌ ${data.error || res.statusText || "Could not add to cart"}`);
         return { success: false, failedItems: data.failedItems ?? allFailed };
       }
+      logKroger("addToKrogerCart OK", {
+        ms: Math.round(cartMs),
+        addedCount: data.addedCount ?? upcsOrdered.length,
+      });
+      logKrogerVerbose("addToKrogerCart response body", data);
       const added = data.addedCount ?? upcsOrdered.length;
       if (allFailed.length > 0) {
         toast.success(
@@ -704,7 +841,11 @@ const NutrifyAI = () => {
       }
       return { success: true, addedCount: added, failedItems: data.failedItems ?? allFailed };
     } catch (err) {
-      console.error("addItemsToCart error:", err);
+      console.error("[Grubify][kroger] addItemsToCart exception", {
+        name: err?.name,
+        message: err?.message,
+        stack: err?.stack,
+      });
       logD("addToKrogerCart network/exception", err?.message, err?.name);
       const m =
         err?.message ||
@@ -841,6 +982,7 @@ const NutrifyAI = () => {
   // Handle ordering with Kroger
   const handleOrderWithKroger = async () => {
     if (!krogerSignInAuthed) {
+      logKroger("Order with Kroger blocked", { reason: "krogerSignInAuthed_false" });
       toast.error("🔐 Please log in to your Kroger account before ordering.");
       return;
     }
@@ -850,9 +992,20 @@ const NutrifyAI = () => {
       .map(ing => ensureIngredientShape(ing));
   
     if (confirmedIngredients.length === 0) {
+      logKroger("Order with Kroger blocked", { reason: "no_confirmed_ingredients" });
       toast.error("✅ Please confirm at least one ingredient to order.");
       return;
     }
+
+    logKroger("Order with Kroger clicked", {
+      recipe: currentRecipe?.name,
+      count: confirmedIngredients.length,
+      searches: confirmedIngredients.map((i) => ({
+        name: i.name,
+        krogerSearchQuery: i.krogerSearchQuery,
+      })),
+    });
+    logKrogerVerbose("Order with Kroger full ingredients", confirmedIngredients);
   
     setLoading(true);
     setCartStatus('adding'); // Show "adding" overlay
@@ -861,11 +1014,17 @@ const NutrifyAI = () => {
       const result = await addItemsToCart(confirmedIngredients);
 
       if (result.success) {
+        logKroger("Order with Kroger finished", { success: true, addedCount: result.addedCount });
         setCartStatus('success');
       } else {
+        logKroger("Order with Kroger finished", {
+          success: false,
+          failedItems: result.failedItems,
+        });
         setCartStatus('error');
       }
     } catch (error) {
+      console.error("[Grubify][kroger] Order with Kroger exception", error);
       setCartStatus('error');
     } finally {
       setLoading(false);
