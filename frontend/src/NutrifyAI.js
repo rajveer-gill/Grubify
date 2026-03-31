@@ -106,7 +106,13 @@ function ensureIngredientShape(ing) {
   return { ...ing, name, amount, krogerSearchQuery: kq };
 }
 
-/** Kroger product search via Flask on Render (browser/GCP cannot call api.kroger.com reliably). */
+/**
+ * Kroger product search via Flask on Render.
+ * One ingredient per HTTP request: keeps each call short (proxy limits) and avoids
+ * parallel Kroger connections from the server (often all time out from datacenter IPs).
+ */
+const KROGER_SEARCH_UPCS_CHUNK_SIZE = 1;
+
 async function fetchKrogerSearchUpcsViaRender(items, krogerToken) {
   const token = (krogerToken != null && String(krogerToken).trim()) || "";
   if (!token) {
@@ -115,82 +121,110 @@ async function fetchKrogerSearchUpcsViaRender(items, krogerToken) {
       "No Kroger token available — use Login with Kroger in the sidebar and complete sign-in."
     );
   }
+
+  const list = Array.isArray(items) ? items : [];
+  const chunks = [];
+  for (let i = 0; i < list.length; i += KROGER_SEARCH_UPCS_CHUNK_SIZE) {
+    chunks.push(list.slice(i, i + KROGER_SEARCH_UPCS_CHUNK_SIZE));
+  }
+
   const t0 = typeof performance !== "undefined" ? performance.now() : Date.now();
-  const itemCount = Array.isArray(items) ? items.length : 0;
-  logKroger("search-upcs request", {
+  logKroger("search-upcs request (chunked)", {
     url: "https://grubify.onrender.com/kroger/search-upcs",
-    itemCount,
+    itemCount: list.length,
+    chunkCount: chunks.length,
+    chunkSize: KROGER_SEARCH_UPCS_CHUNK_SIZE,
     token: summarizeToken(token),
   });
   logKrogerVerbose("search-upcs payload (items only, no token)", items);
 
-  let res;
-  try {
-    res = await fetch("https://grubify.onrender.com/kroger/search-upcs", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ items, kroger_token: token }),
-    });
-  } catch (networkErr) {
-    const ms = (typeof performance !== "undefined" ? performance.now() : Date.now()) - t0;
-    console.error("[Grubify][kroger] search-upcs network error", {
-      ms: Math.round(ms),
-      name: networkErr?.name,
-      message: networkErr?.message,
-      hint:
-        "Often CORS or connection drop if Render/gunicorn timed out — check Render logs for [search-upcs req=…]",
-    });
-    throw networkErr;
-  }
+  const allUpcs = [];
+  const allFailed = [];
+  let lastRequestId = null;
 
-  const raw = await res.text();
-  const ms = (typeof performance !== "undefined" ? performance.now() : Date.now()) - t0;
-  const requestId =
-    typeof res.headers?.get === "function"
-      ? res.headers.get("X-Request-Id")
-      : null;
-  let data = {};
-  if (raw.trim()) {
+  for (let c = 0; c < chunks.length; c++) {
+    const chunk = chunks[c];
+    const chunkLabel = `${c + 1}/${chunks.length}`;
+    let res;
     try {
-      data = JSON.parse(raw);
-    } catch (parseErr) {
-      console.error("[Grubify][kroger] search-upcs invalid JSON", {
-        status: res.status,
+      res = await fetch("https://grubify.onrender.com/kroger/search-upcs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ items: chunk, kroger_token: token }),
+      });
+    } catch (networkErr) {
+      const ms =
+        (typeof performance !== "undefined" ? performance.now() : Date.now()) - t0;
+      console.error("[Grubify][kroger] search-upcs network error", {
+        chunk: chunkLabel,
         ms: Math.round(ms),
+        name: networkErr?.name,
+        message: networkErr?.message,
+        hint:
+          "Check Render logs [search-upcs req=…]. Chunked requests avoid long single calls.",
+      });
+      throw networkErr;
+    }
+
+    const raw = await res.text();
+    const requestId =
+      typeof res.headers?.get === "function"
+        ? res.headers.get("X-Request-Id")
+        : null;
+    if (requestId) lastRequestId = requestId;
+
+    let data = {};
+    if (raw.trim()) {
+      try {
+        data = JSON.parse(raw);
+      } catch (parseErr) {
+        console.error("[Grubify][kroger] search-upcs invalid JSON", {
+          chunk: chunkLabel,
+          status: res.status,
+          requestId,
+          bodyPreview: raw.slice(0, 400),
+        });
+        return { ok: false, error: "Invalid JSON from search-upcs", status: res.status };
+      }
+    }
+    if (!res.ok) {
+      console.error("[Grubify][kroger] search-upcs HTTP error", {
+        chunk: chunkLabel,
+        status: res.status,
         requestId,
+        error: data.error || res.statusText,
         bodyPreview: raw.slice(0, 400),
       });
-      return { ok: false, error: "Invalid JSON from search-upcs", status: res.status };
+      if (requestId) {
+        logKroger("search-upcs failed — grep Render logs for", { requestId });
+      }
+      return { ok: false, status: res.status, error: data.error || res.statusText };
     }
-  }
-  if (!res.ok) {
-    console.error("[Grubify][kroger] search-upcs HTTP error", {
-      status: res.status,
-      ms: Math.round(ms),
+
+    const upcs = Array.isArray(data.upcs) ? data.upcs : [];
+    const failedItems = Array.isArray(data.failedItems) ? data.failedItems : [];
+    allUpcs.push(...upcs);
+    allFailed.push(...failedItems);
+    logKrogerVerbose(`search-upcs chunk ${chunkLabel} OK`, {
       requestId,
-      error: data.error || res.statusText,
-      bodyPreview: raw.slice(0, 400),
+      upcCount: upcs.length,
+      failedCount: failedItems.length,
     });
-    if (requestId) {
-      logKroger("search-upcs failed — grep Render logs for", { requestId });
-    }
-    return { ok: false, status: res.status, error: data.error || res.statusText };
   }
 
-  const upcs = Array.isArray(data.upcs) ? data.upcs : [];
-  const failedItems = Array.isArray(data.failedItems) ? data.failedItems : [];
-  logKroger("search-upcs OK", {
+  const ms = (typeof performance !== "undefined" ? performance.now() : Date.now()) - t0;
+  logKroger("search-upcs OK (all chunks)", {
     ms: Math.round(ms),
-    requestId,
-    upcCount: upcs.length,
-    failedCount: failedItems.length,
+    requestId: lastRequestId,
+    upcCount: allUpcs.length,
+    failedCount: allFailed.length,
   });
-  logKrogerVerbose("search-upcs response body", { upcs, failedItems });
+  logKrogerVerbose("search-upcs merged response", { upcs: allUpcs, failedItems: allFailed });
 
   return {
     ok: true,
-    upcs,
-    failedItems,
+    upcs: allUpcs,
+    failedItems: allFailed,
   };
 }
 

@@ -57,20 +57,20 @@ CLIENT_ID = os.environ["KROGER_CLIENT_ID"]
 REDIRECT_URI = "https://grubify.onrender.com/callback"
 AUTH_URL = "https://api.kroger.com/v1/connect/oauth2/authorize"  # Add this line
 try:
-    # Default 55s read: 18s was too short — parallel fetches to Kroger often hit ReadTimeout.
+    # 120s read: from cloud IPs Kroger often needs >55s; parallel connections get throttled.
     KROGER_WEB_SEARCH_TIMEOUT_SECONDS = max(
-        10, int(os.environ.get("KROGER_WEB_SEARCH_TIMEOUT_SECONDS", "55"))
+        15, int(os.environ.get("KROGER_WEB_SEARCH_TIMEOUT_SECONDS", "120"))
     )
 except ValueError:
-    KROGER_WEB_SEARCH_TIMEOUT_SECONDS = 55
+    KROGER_WEB_SEARCH_TIMEOUT_SECONDS = 120
 
 try:
-    # Fewer parallel connections to www.kroger.com reduces read timeouts from their edge.
+    # Default 1: sequential Kroger fetches — parallel requests from datacenter IPs often all time out.
     KROGER_SEARCH_MAX_WORKERS = max(
-        1, min(8, int(os.environ.get("KROGER_SEARCH_MAX_WORKERS", "3")))
+        1, min(8, int(os.environ.get("KROGER_SEARCH_MAX_WORKERS", "1")))
     )
 except ValueError:
-    KROGER_SEARCH_MAX_WORKERS = 3
+    KROGER_SEARCH_MAX_WORKERS = 1
 
 
 def _resolve_kroger_term(term: str, req_id: str = ""):

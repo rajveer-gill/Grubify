@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import re
+import time
 from typing import Any, Optional, Tuple
 
 import requests
@@ -92,15 +93,25 @@ def search_upc_via_kroger_website(term: str, timeout: int = 30) -> Tuple[Optiona
     # send the full HTML (especially from cloud IPs or under parallel load).
     connect_s = min(20, max(5, timeout // 3))
     timeout_tuple = (connect_s, timeout)
-    try:
-        r = requests.get(
-            url,
-            params={"query": term},
-            headers=KROGER_BROWSER_HEADERS,
-            timeout=timeout_tuple,
-        )
-    except requests.RequestException as e:
-        return None, 0, f"request_error:{str(e)[:120]}"
+    r = None
+    for attempt in range(2):
+        try:
+            r = requests.get(
+                url,
+                params={"query": term},
+                headers=KROGER_BROWSER_HEADERS,
+                timeout=timeout_tuple,
+            )
+            break
+        except requests.Timeout as e:
+            if attempt == 0:
+                time.sleep(1.5)
+                continue
+            return None, 0, f"request_error:{str(e)[:120]}"
+        except requests.RequestException as e:
+            return None, 0, f"request_error:{str(e)[:120]}"
+    if r is None:
+        return None, 0, "request_error:no response"
 
     print(f"[search-upcs] Kroger.com web search '{term}': HTTP {r.status_code}")
 

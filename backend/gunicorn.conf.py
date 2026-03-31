@@ -4,6 +4,7 @@ import os
 
 bind = f"0.0.0.0:{os.environ.get('PORT', '8000')}"
 workers = int(os.environ.get("WEB_CONCURRENCY", "1"))
-timeout = int(os.environ.get("GUNICORN_TIMEOUT", "300"))
+# Kroger HTML search can take many minutes per cart (sequential terms × 120s).
+timeout = int(os.environ.get("GUNICORN_TIMEOUT", "900"))
 graceful_timeout = int(os.environ.get("GUNICORN_GRACEFUL_TIMEOUT", "60"))
 keepalive = 5
