@@ -719,15 +719,19 @@ const NutrifyAI = () => {
   
   // Handle recipe submission with API call
   const handleSubmitRecipe = async () => {
-    if (inputValue.trim() === '') return;
-    
+    const trimmedInput = inputValue.trim();
+    if (trimmedInput === "") {
+      setError("Please enter a recipe idea before searching.");
+      return;
+    }
+
     setFilteredSuggestions([]);
     setLoading(true);
     setError(null);
     
     try {
       // Call our Python backend API
-      const recipe = await fetchRecipeFromAPI(inputValue);
+      const recipe = await fetchRecipeFromAPI(trimmedInput);
       
       // Add pantry status to ingredients (randomly for demo)
       const recipeWithPantry = {
@@ -1008,7 +1012,10 @@ const NutrifyAI = () => {
                   <input
                     type="text"
                     value={inputValue}
-                    onChange={(e) => setInputValue(e.target.value)}
+                    onChange={(e) => {
+                      setInputValue(e.target.value);
+                      if (error) setError(null);
+                    }}
                     placeholder="Enter whatever you want to eat with any personalizations you want. Get Creative!"
                     className="center-text-input"
                     disabled={loading}
@@ -1526,7 +1533,7 @@ const NutrifyAI = () => {
                 <div className="action-buttons">
                   <button
                     className="primary-button"
-                    onClick={() => window.open("http://127.0.0.1:5000/login", "_blank")}
+                    onClick={() => window.open("https://grubify.onrender.com/login", "_blank")}
                   >
                     Login with Kroger
                   </button>
