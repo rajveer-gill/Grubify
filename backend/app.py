@@ -336,7 +336,9 @@ def kroger_search_upcs():
             unique_terms.append(term)
 
     if unique_terms:
-        max_workers = min(4, len(unique_terms))
+        # Resolve all distinct terms in one parallel batch (cap avoids runaway threads).
+        # With max_workers=4 and 8 ingredients, wall time was ~2× Kroger latency and hit gunicorn's default 30s timeout.
+        max_workers = min(16, max(1, len(unique_terms)))
         print(
             f"[search-upcs req={req_id}] unique_terms={len(unique_terms)} "
             f"workers={max_workers} terms={unique_terms!r}"
