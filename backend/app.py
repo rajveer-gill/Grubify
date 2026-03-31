@@ -9,6 +9,7 @@ from user import exchange_code_for_token, add_item_to_cart
 from dotenv import load_dotenv
 from data import Database
 from quantulum3 import parser as quantulum_parser
+from concurrent.futures import ThreadPoolExecutor
 import json as json_lib
 import requests
 import os
@@ -33,6 +34,7 @@ CORS(
     app,
     origins=[
         "https://grubify.ai",
+        "https://www.grubify.ai",
         "https://grubify-9cf13.firebaseapp.com",
         "https://grubify-9cf13.web.app",
         "http://localhost:3000",
@@ -57,6 +59,27 @@ try:
     )
 except ValueError:
     KROGER_WEB_SEARCH_TIMEOUT_SECONDS = 18
+
+
+def _resolve_kroger_term(term: str):
+    """One Kroger HTML search (+ optional OpenAI alternates). Used by ThreadPoolExecutor."""
+    upc, http_status, detail = search_upc_via_kroger_website(
+        term,
+        timeout=KROGER_WEB_SEARCH_TIMEOUT_SECONDS,
+    )
+    retried_with = None
+    if not upc and detail == "no_upc_in_page":
+        for alt in expand_kroger_search_terms(term):
+            u2, st2, d2 = search_upc_via_kroger_website(
+                alt,
+                timeout=KROGER_WEB_SEARCH_TIMEOUT_SECONDS,
+            )
+            if u2:
+                upc, http_status, detail = u2, st2, d2
+                retried_with = alt
+                break
+    return (upc, http_status, detail, retried_with)
+
 
 UNIT_TO_GRAMS = {
     'tablespoon': 15,  # very rough average
@@ -271,9 +294,26 @@ def kroger_search_upcs():
 
     upcs = []
     failed_items = []
-    # Cache term lookups within a request so duplicate ingredient terms do not
-    # trigger repeated Kroger page fetches (helps avoid upstream timeouts/502s).
+    # Unique search terms resolved in parallel so total wall time stays under
+    # Gunicorn's worker timeout (sequential Kroger fetches were ~20s each).
     lookup_cache = {}
+    seen_terms = set()
+    unique_terms = []
+    for raw in items:
+        term, _ = parse_search_upc_item(raw)
+        if not term:
+            continue
+        ck = term.strip().lower()
+        if ck not in seen_terms:
+            seen_terms.add(ck)
+            unique_terms.append(term)
+
+    if unique_terms:
+        max_workers = min(4, len(unique_terms))
+        with ThreadPoolExecutor(max_workers=max_workers) as ex:
+            resolved = list(ex.map(_resolve_kroger_term, unique_terms))
+        for term, result in zip(unique_terms, resolved):
+            lookup_cache[term.strip().lower()] = result
 
     for raw in items:
         term, label = parse_search_upc_item(raw)
@@ -282,27 +322,7 @@ def kroger_search_upcs():
             continue
 
         cache_key = term.strip().lower()
-        cached = lookup_cache.get(cache_key)
-        if cached is None:
-            upc, http_status, detail = search_upc_via_kroger_website(
-                term,
-                timeout=KROGER_WEB_SEARCH_TIMEOUT_SECONDS,
-            )
-            retried_with = None
-
-            if not upc and detail == "no_upc_in_page":
-                for alt in expand_kroger_search_terms(term):
-                    u2, st2, d2 = search_upc_via_kroger_website(
-                        alt,
-                        timeout=KROGER_WEB_SEARCH_TIMEOUT_SECONDS,
-                    )
-                    if u2:
-                        upc, http_status, detail = u2, st2, d2
-                        retried_with = alt
-                        break
-            lookup_cache[cache_key] = (upc, http_status, detail, retried_with)
-        else:
-            upc, http_status, detail, retried_with = cached
+        upc, http_status, detail, retried_with = lookup_cache[cache_key]
 
         if detail.startswith("request_error"):
             failed_items.append(
