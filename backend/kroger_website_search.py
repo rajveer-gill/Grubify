@@ -88,12 +88,16 @@ def search_upc_via_kroger_website(term: str, timeout: int = 30) -> Tuple[Optiona
         return None, 0, "empty_term"
 
     url = "https://www.kroger.com/search"
+    # Separate connect vs read: Kroger often accepts the TCP connection but is slow to
+    # send the full HTML (especially from cloud IPs or under parallel load).
+    connect_s = min(20, max(5, timeout // 3))
+    timeout_tuple = (connect_s, timeout)
     try:
         r = requests.get(
             url,
             params={"query": term},
             headers=KROGER_BROWSER_HEADERS,
-            timeout=timeout,
+            timeout=timeout_tuple,
         )
     except requests.RequestException as e:
         return None, 0, f"request_error:{str(e)[:120]}"

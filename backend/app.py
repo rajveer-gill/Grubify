@@ -57,11 +57,20 @@ CLIENT_ID = os.environ["KROGER_CLIENT_ID"]
 REDIRECT_URI = "https://grubify.onrender.com/callback"
 AUTH_URL = "https://api.kroger.com/v1/connect/oauth2/authorize"  # Add this line
 try:
+    # Default 55s read: 18s was too short — parallel fetches to Kroger often hit ReadTimeout.
     KROGER_WEB_SEARCH_TIMEOUT_SECONDS = max(
-        5, int(os.environ.get("KROGER_WEB_SEARCH_TIMEOUT_SECONDS", "18"))
+        10, int(os.environ.get("KROGER_WEB_SEARCH_TIMEOUT_SECONDS", "55"))
     )
 except ValueError:
-    KROGER_WEB_SEARCH_TIMEOUT_SECONDS = 18
+    KROGER_WEB_SEARCH_TIMEOUT_SECONDS = 55
+
+try:
+    # Fewer parallel connections to www.kroger.com reduces read timeouts from their edge.
+    KROGER_SEARCH_MAX_WORKERS = max(
+        1, min(8, int(os.environ.get("KROGER_SEARCH_MAX_WORKERS", "3")))
+    )
+except ValueError:
+    KROGER_SEARCH_MAX_WORKERS = 3
 
 
 def _resolve_kroger_term(term: str, req_id: str = ""):
@@ -316,7 +325,8 @@ def kroger_search_upcs():
     print(
         f"[search-upcs req={req_id}] start origin={origin!r} "
         f"items={len(items)} token_len={len(kroger_token)} "
-        f"timeout_s={KROGER_WEB_SEARCH_TIMEOUT_SECONDS}"
+        f"timeout_s={KROGER_WEB_SEARCH_TIMEOUT_SECONDS} "
+        f"max_workers_cap={KROGER_SEARCH_MAX_WORKERS}"
     )
 
     upcs = []
@@ -336,9 +346,7 @@ def kroger_search_upcs():
             unique_terms.append(term)
 
     if unique_terms:
-        # Resolve all distinct terms in one parallel batch (cap avoids runaway threads).
-        # With max_workers=4 and 8 ingredients, wall time was ~2× Kroger latency and hit gunicorn's default 30s timeout.
-        max_workers = min(16, max(1, len(unique_terms)))
+        max_workers = min(KROGER_SEARCH_MAX_WORKERS, max(1, len(unique_terms)))
         print(
             f"[search-upcs req={req_id}] unique_terms={len(unique_terms)} "
             f"workers={max_workers} terms={unique_terms!r}"
